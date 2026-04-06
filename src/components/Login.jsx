@@ -4,7 +4,7 @@ import { apiFetch } from '../config/api';
 import { useAdminAuth } from '../contexts/AdminAuthContext';
 import Button from './Button';
 import Badge from './Badge';
-import InputField from './InputField';
+import InputField from './InputField';  
 
 const shnoorLogo = '/favicon.png';
 
@@ -317,11 +317,11 @@ const Login = () => {
                 {showPassword ? <EyeOff /> : <EyeOpen />}
               </button>
               {errors.password && <p className="text-xs text-shnoor-danger mt-1">{errors.password}</p>}
-              <div className="text-right mt-1">
+              {/* <div className="text-right mt-1">
                 <Link to="/forgot-password" className="text-xs text-shnoor-indigo hover:text-shnoor-navy transition-colors">
                   Forgot password?
                 </Link>
-              </div>
+              </div> */}
             </div>
 
             <Button

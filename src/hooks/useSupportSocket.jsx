@@ -162,7 +162,8 @@ export const useSupportSocket = ({
 
     // Create socket connection
     const socket = io(SOCKET_URL, {
-      transports: ['polling', 'websocket'],
+      // AFTER
+      transports: ['polling'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
@@ -279,8 +280,6 @@ export const useSupportSocket = ({
     isConnected,
     notifications,
     unreadCount,
-    addNotification,
-    clearNotifications,
     markAllRead,
     removeNotification,
     notificationPermission,

@@ -42,14 +42,24 @@ function BulkStudentUpload() {
             formData.append('file', file);
 
             const token = localStorage.getItem('adminToken');
+            
+            // Fix: Safely clean the base URL to prevent double slashes (//)
+            const cleanBaseUrl = API_URL.endsWith('/') ? API_URL.slice(0, -1) : API_URL;
 
-            const response = await fetch(`${API_URL}/api/upload/students`, {
+            const response = await fetch(`${cleanBaseUrl}/api/upload/students`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`
+                    // Do NOT set Content-Type here; browser sets it automatically for FormData
                 },
                 body: formData
             });
+
+            // Catch HTML error pages from CloudFront/Express before they break JSON parsing
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") === -1) {
+                throw new Error("Server returned HTML instead of JSON. The API endpoint route might be incorrect.");
+            }
 
             const data = await response.json();
 
@@ -60,7 +70,6 @@ function BulkStudentUpload() {
             setResult(data);
             setShowResults(true);
 
-            // Clear file input
             setFile(null);
             document.getElementById('fileInput').value = '';
 

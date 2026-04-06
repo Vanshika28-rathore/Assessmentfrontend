@@ -590,6 +590,9 @@ const CreateTestSection = ({ onComplete, editingTest }) => {
 
         try {
             const token = localStorage.getItem('adminToken');
+            const cleanBaseUrl = import.meta.env.VITE_API_URL.endsWith('/')
+                ? import.meta.env.VITE_API_URL.slice(0, -1)
+                : import.meta.env.VITE_API_URL;
 
             if (isEditMode && uploadedTestId) {
                 // Edit mode: Update existing test with new questions from file
@@ -603,49 +606,31 @@ const CreateTestSection = ({ onComplete, editingTest }) => {
                 formData.append('passingPercentage', passingPercentage);
                 formData.append('startDateTime', convertISTToUTC(startDateTime) || '');
                 formData.append('endDateTime', convertISTToUTC(endDateTime) || '');
-                formData.append('testId', uploadedTestId); // Include test ID for update
+                formData.append('testId', uploadedTestId);
 
-                const response = await apiFetch(`api/upload/questions/${uploadedTestId}`, {
+                // FIX: Use native fetch instead of apiFetch to preserve FormData boundaries
+                const response = await fetch(`${cleanBaseUrl}/api/upload/questions/${uploadedTestId}`, {
                     method: 'PUT',
                     headers: {
                         'Authorization': `Bearer ${token}`
+                        // DO NOT put Content-Type here!
                     },
                     body: formData
                 });
 
+                // Catch HTML error pages from CloudFront/Express before they break JSON parsing
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") === -1) {
+                    throw new Error("Server returned HTML. The endpoint /api/upload/questions might be incorrect or missing on the backend.");
+                }
+
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    // CODE EXECUTION FEATURE - TEMPORARILY DISABLED
-                    // if (ENABLE_CODE_EXECUTION) {
-                    //     // Save coding questions after bulk upload in edit mode
-                    //     console.log('[BULK UPLOAD EDIT] Saving coding questions:', /* codingQuestions.length */ 0);
-                    //     console.log('[BULK UPLOAD EDIT] Coding questions data:', JSON.stringify(/* codingQuestions */ [], null, 2));
-                    //     
-                    //     const codingResponse = await apiFetch(`api/coding-questions/test/${uploadedTestId}`, {
-                    //         method: 'POST',
-                    //         headers: {
-                    //             'Authorization': `Bearer ${token}`,
-                    //             'Content-Type': 'application/json'
-                    //         },
-                    //         body: JSON.stringify({
-                    //             codingQuestions: /* codingQuestions */ []
-                    //         })
-                    //     });
-                    //
-                    //     const codingData = await codingResponse.json();
-                    //     if (!codingResponse.ok || !codingData.success) {
-                    //         console.error('[BULK UPLOAD EDIT] Failed to save coding questions:', codingData);
-                    //         alert('Questions uploaded but failed to save coding questions: ' + codingData.message);
-                    //         setIsUploading(false);
-                    //         return;
-                    //     }
-                    //     console.log('[BULK UPLOAD EDIT] Coding questions saved successfully');
-                    // }
-
                     alert(`Questions uploaded successfully! ${data.questionsCount} questions added. Click "Save Changes" to save.`);
-                    // Reload test data to show new questions
-                    const testResponse = await apiFetch(`api/tests/${uploadedTestId}`, {
+
+                    // Reload test data to show new questions (Use native fetch here too to be safe)
+                    const testResponse = await fetch(`${cleanBaseUrl}/api/tests/${uploadedTestId}`, {
                         headers: {
                             'Authorization': `Bearer ${token}`
                         }
@@ -660,7 +645,6 @@ const CreateTestSection = ({ onComplete, editingTest }) => {
                         }));
                         setQuestions(loadedQuestions);
                     }
-                    // Stay in edit mode (init step) to allow saving
                     setStep('init');
                 } else {
                     alert(data.message || 'Failed to upload questions');
@@ -677,48 +661,28 @@ const CreateTestSection = ({ onComplete, editingTest }) => {
                 formData.append('passingPercentage', passingPercentage);
                 formData.append('startDateTime', convertISTToUTC(startDateTime) || '');
                 formData.append('endDateTime', convertISTToUTC(endDateTime) || '');
-                formData.append('status', 'draft'); // Save as draft initially
+                formData.append('status', 'draft');
 
-                const response = await apiFetch('api/upload/questions', {
+                // FIX: Use native fetch instead of apiFetch
+                const response = await fetch(`${cleanBaseUrl}/api/upload/questions`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`
+                        // DO NOT put Content-Type here!
                     },
                     body: formData
                 });
+
+                // Catch HTML error pages
+                const contentType = response.headers.get("content-type");
+                if (contentType && contentType.indexOf("application/json") === -1) {
+                    throw new Error("Server returned HTML. The endpoint /api/upload/questions might be incorrect or missing on the backend.");
+                }
 
                 const data = await response.json();
 
                 if (response.ok && data.success) {
                     const testId = data.testId;
-
-                    // CODE EXECUTION FEATURE - TEMPORARILY DISABLED
-                    // if (ENABLE_CODE_EXECUTION) {
-                    //     // Save coding questions after bulk upload
-                    //     console.log('[BULK UPLOAD] Saving coding questions:', /* codingQuestions.length */ 0);
-                    //     console.log('[BULK UPLOAD] Coding questions data:', JSON.stringify(/* codingQuestions */ [], null, 2));
-                    //     
-                    //     const codingResponse = await apiFetch(`api/coding-questions/test/${testId}`, {
-                    //         method: 'POST',
-                    //         headers: {
-                    //             'Authorization': `Bearer ${token}`,
-                    //             'Content-Type': 'application/json'
-                    //         },
-                    //         body: JSON.stringify({
-                    //             codingQuestions: /* codingQuestions */ []
-                    //         })
-                    //     });
-                    //
-                    //     const codingData = await codingResponse.json();
-                    //     if (!codingResponse.ok || !codingData.success) {
-                    //         console.error('[BULK UPLOAD] Failed to save coding questions:', codingData);
-                    //         alert('Test created but failed to save coding questions: ' + codingData.message);
-                    //         setIsUploading(false);
-                    //         return;
-                    //     }
-                    //     console.log('[BULK UPLOAD] Coding questions saved successfully');
-                    // }
-
                     setUploadedTestId(testId);
                     setUploadedTestName(testTitle);
                     setStep('success');
@@ -728,10 +692,10 @@ const CreateTestSection = ({ onComplete, editingTest }) => {
             }
         } catch (error) {
             console.error('Upload error:', error);
-            alert('Failed to upload test. Please try again.');
+            alert(error.message || 'Failed to upload test. Please try again.');
         } finally {
             setIsUploading(false);
-            e.target.value = ''; // Reset file input
+            e.target.value = '';
         }
     };
 
@@ -839,8 +803,8 @@ const CreateTestSection = ({ onComplete, editingTest }) => {
                             </div>
                             {nameAvailability.message && (
                                 <p className={`mt-2 text-sm ${nameAvailability.available
-                                        ? 'text-shnoor-success'
-                                        : 'text-shnoor-danger'
+                                    ? 'text-shnoor-success'
+                                    : 'text-shnoor-danger'
                                     }`}>
                                     {nameAvailability.message}
                                 </p>
@@ -1142,8 +1106,8 @@ const CreateTestSection = ({ onComplete, editingTest }) => {
                                 <button
                                     onClick={() => handleStart('manual')}
                                     className={`p-6 border-2 border-shnoor-mist rounded-xl text-left transition-all hover:border-shnoor-indigo group bg-white ${!testTitle || nameAvailability.available === false || nameAvailability.checking
-                                            ? 'opacity-50 cursor-not-allowed'
-                                            : 'hover:shadow-md'
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : 'hover:shadow-md'
                                         }`}
                                     disabled={!testTitle || nameAvailability.available === false || nameAvailability.checking}
                                 >
@@ -1157,8 +1121,8 @@ const CreateTestSection = ({ onComplete, editingTest }) => {
                                 <button
                                     onClick={() => handleStart('bulk')}
                                     className={`p-6 border-2 border-shnoor-mist rounded-xl text-left transition-all hover:border-shnoor-indigo group bg-white ${!testTitle || nameAvailability.available === false || nameAvailability.checking
-                                            ? 'opacity-50 cursor-not-allowed'
-                                            : 'hover:shadow-md'
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : 'hover:shadow-md'
                                         }`}
                                     disabled={!testTitle || nameAvailability.available === false || nameAvailability.checking}
                                 >
@@ -1204,8 +1168,8 @@ const CreateTestSection = ({ onComplete, editingTest }) => {
                                             type="button"
                                             onClick={() => setCurrentQuestion({ ...currentQuestion, format: 'paragraph' })}
                                             className={`p-2 rounded transition-colors ${currentQuestion.format === 'paragraph'
-                                                    ? 'bg-shnoor-indigo text-white'
-                                                    : 'text-shnoor-navy hover:bg-white'
+                                                ? 'bg-shnoor-indigo text-white'
+                                                : 'text-shnoor-navy hover:bg-white'
                                                 }`}
                                             title="Paragraph format (Markdown supported)"
                                         >
@@ -1215,8 +1179,8 @@ const CreateTestSection = ({ onComplete, editingTest }) => {
                                             type="button"
                                             onClick={() => setCurrentQuestion({ ...currentQuestion, format: 'line' })}
                                             className={`p-2 rounded transition-colors ${currentQuestion.format === 'line'
-                                                    ? 'bg-shnoor-indigo text-white'
-                                                    : 'text-shnoor-navy hover:bg-white'
+                                                ? 'bg-shnoor-indigo text-white'
+                                                : 'text-shnoor-navy hover:bg-white'
                                                 }`}
                                             title="Line format (preserves line breaks)"
                                         >
@@ -1226,8 +1190,8 @@ const CreateTestSection = ({ onComplete, editingTest }) => {
                                             type="button"
                                             onClick={() => setCurrentQuestion({ ...currentQuestion, format: 'code' })}
                                             className={`p-2 rounded transition-colors ${currentQuestion.format === 'code'
-                                                    ? 'bg-shnoor-indigo text-white'
-                                                    : 'text-shnoor-navy hover:bg-white'
+                                                ? 'bg-shnoor-indigo text-white'
+                                                : 'text-shnoor-navy hover:bg-white'
                                                 }`}
                                             title="Code format (monospace, syntax highlighting)"
                                         >
