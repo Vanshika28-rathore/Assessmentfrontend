@@ -167,7 +167,7 @@ export const useSupportSocket = ({
 
     try {
       socket = io(SOCKET_URL, {
-        transports: ['websocket', 'polling'],
+        transports: ['polling'],
         reconnection: true,
         reconnectionAttempts: MAX_ATTEMPTS,
         reconnectionDelay: 2000,
