@@ -51,6 +51,28 @@ const InterviewRoom = () => {
   const isStudent = !!localStorage.getItem('studentAuthToken') && !isAdmin;
   const role = isAdmin ? 'admin' : 'student';
 
+  const safePlayVideo = async (videoElement, stream) => {
+    if (!videoElement) return;
+
+    // If already playing same stream, skip
+    if (videoElement.srcObject === stream) return;
+
+    // Pause first before changing stream
+    videoElement.pause();
+    videoElement.srcObject = stream;
+
+    try {
+      await videoElement.play();
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        // Safe to ignore — stream changed before play completed
+        console.log('Video play aborted (stream changed) - safe to ignore');
+      } else {
+        console.error('Video play error:', err);
+      }
+    }
+  };
+
   // Enhanced helper function to ensure video plays
   const ensureVideoPlays = async (videoElement, streamType) => {
     if (!videoElement || !videoElement.srcObject) {
@@ -147,6 +169,8 @@ const InterviewRoom = () => {
     };
   }, []);
 
+  const remoteStreamRef = useRef(null);
+
   // Auto-scroll chat to bottom when new messages arrive
   useEffect(() => {
     if (chatEndRef.current) {
@@ -158,12 +182,7 @@ const InterviewRoom = () => {
   useEffect(() => {
     if (localStreamRef.current) {
       if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStreamRef.current;
-        const timeoutId = setTimeout(() => {
-          ensureVideoPlays(localVideoRef.current, 'Local');
-        }, 100);
-
-        return () => clearTimeout(timeoutId);
+        safePlayVideo(localVideoRef.current, localStreamRef.current);
       }
     }
   }, [localStreamRef.current]);
@@ -171,10 +190,7 @@ const InterviewRoom = () => {
   // Separate effect for PIP video during calls
   useEffect(() => {
     if (call && localStreamRef.current && localVideoPipRef.current) {
-      localVideoPipRef.current.srcObject = localStreamRef.current;
-      setTimeout(() => {
-        ensureVideoPlays(localVideoPipRef.current, 'Local-PIP');
-      }, 150);
+      safePlayVideo(localVideoPipRef.current, localStreamRef.current);
     }
   }, [call, localStreamRef.current]);
 
@@ -205,27 +221,10 @@ const InterviewRoom = () => {
   }, [isInterviewTimeValid, isStudent, studentInRoom]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && remoteVideoRef.current.srcObject) {
-      const timeoutId = setTimeout(() => {
-        ensureVideoPlays(remoteVideoRef.current, 'Remote');
-      }, 100);
-      return () => clearTimeout(timeoutId);
+    if (remoteVideoRef.current && remoteStreamRef.current) {
+      safePlayVideo(remoteVideoRef.current, remoteStreamRef.current);
     }
-    // Apply any stream that arrived before the video element was mounted
-    if (remoteVideoRef.current && pendingRemoteStreamRef.current) {
-      const el = remoteVideoRef.current;
-      const stream = pendingRemoteStreamRef.current;
-      el.srcObject = stream;
-      el.muted = false;
-      el.playsInline = true;
-      el.autoplay = true;
-      el.play().catch(e => {
-        console.error('Pending stream play failed:', e);
-        setTimeout(() => el.play().catch(console.error), 500);
-      });
-      pendingRemoteStreamRef.current = null;
-    }
-  }, [call, remoteVideoRef.current?.srcObject]);
+  });
 
   // Additional effect to monitor remote video stream
   useEffect(() => {
@@ -323,7 +322,7 @@ const InterviewRoom = () => {
       console.log('Connecting to socket URL:', socketUrl);
 
       const socket = io(socketUrl, {
-        transports: ['polling', 'websocket'], // polling first — avoids connection issues on load balancers
+        transports: ['polling'], // polling first — avoids connection issues on load balancers
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionAttempts: 10,
@@ -378,15 +377,27 @@ const InterviewRoom = () => {
       // Initialize PeerJS pointing to our own backend signaling server
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
       const isSecure = apiUrl.startsWith('https');
-      const backendHost = apiUrl
-        .replace(/^https?:\/\//, '')
-        .replace(/\/$/, '')
-        .split(':')[0]; // strip port from host if present
-      const backendPort = isSecure ? 443 : 5000;
+      
+      let backendHost = 'localhost';
+      let backendPort = 5000;
+      let peerPath = '/peerjs';
+      
+      try {
+        const parsedUrl = new URL(apiUrl);
+        backendHost = parsedUrl.hostname;
+        backendPort = parsedUrl.port ? parseInt(parsedUrl.port) : (isSecure ? 443 : 80);
+        // If API URL has a path (like /api), append /peerjs to it, otherwise just /peerjs
+        const basePath = parsedUrl.pathname === '/' ? '' : parsedUrl.pathname;
+        // The backend server mounts peerjs at /peerjs relative to the root, not /api/peerjs, 
+        // but if reverse proxy uses paths we need to be careful. Generally /peerjs is correct.
+        peerPath = '/peerjs'; 
+      } catch (e) {
+        console.error('Error parsing API URL for PeerJS:', e);
+      }
 
       const newPeer = new Peer(undefined, {
         host: backendHost,
-        path: '/peerjs',
+        path: peerPath,
         port: backendPort,
         secure: isSecure,
         config: {
@@ -614,7 +625,6 @@ const InterviewRoom = () => {
     // Request chat history when joining
     socket.emit('interview:get-chat-history', { interviewId });
   };
-  const pendingRemoteStreamRef = useRef(null);
   const incomingCallRef = useRef(null); // stores PeerJS incoming call until student clicks Answer
 
   const answerCall = async (incoming) => {
@@ -626,8 +636,7 @@ const InterviewRoom = () => {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localStreamRef.current = stream;
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-          ensureVideoPlays(localVideoRef.current, 'Local');
+          safePlayVideo(localVideoRef.current, stream);
         }
       }
 
@@ -640,25 +649,11 @@ const InterviewRoom = () => {
           audioTracks: remoteStream.getAudioTracks().length,
         });
 
-        // remoteVideoRef is only in the DOM after setCall(incoming) triggers a re-render.
-        // Store the stream and apply it once the element is available.
-        pendingRemoteStreamRef.current = remoteStream;
-
-        const applyStream = (el) => {
-          el.srcObject = remoteStream;
-          el.muted = false;
-          el.playsInline = true;
-          el.autoplay = true;
-          el.play().catch(e => {
-            console.error('Failed to play admin video:', e);
-            setTimeout(() => el.play().catch(console.error), 1000);
-          });
-        };
+        remoteStreamRef.current = remoteStream;
 
         if (remoteVideoRef.current) {
-          applyStream(remoteVideoRef.current);
+          safePlayVideo(remoteVideoRef.current, remoteStream);
         }
-        // The useEffect below will also fire once remoteVideoRef mounts
       });
 
       incoming.on('close', () => {
@@ -667,7 +662,7 @@ const InterviewRoom = () => {
         setCall(null);
         setIncomingCall(false);
         setCallState('ended');
-        pendingRemoteStreamRef.current = null;
+        remoteStreamRef.current = null;
       });
 
       incoming.on('error', (error) => {
@@ -702,8 +697,7 @@ const InterviewRoom = () => {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localStreamRef.current = stream;
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-          ensureVideoPlays(localVideoRef.current, 'Local');
+          safePlayVideo(localVideoRef.current, stream);
         }
       }
 
@@ -741,8 +735,7 @@ const InterviewRoom = () => {
       localStreamRef.current = stream;
 
       if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-        ensureVideoPlays(localVideoRef.current, 'Local');
+        safePlayVideo(localVideoRef.current, stream);
       }
 
       // Mark student as in room
@@ -800,8 +793,7 @@ const InterviewRoom = () => {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localStreamRef.current = stream;
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-          ensureVideoPlays(localVideoRef.current, 'Local');
+          safePlayVideo(localVideoRef.current, stream);
         }
       }
 
@@ -830,25 +822,10 @@ const InterviewRoom = () => {
           audioTracks: remoteStream.getAudioTracks().length
         });
 
-        const applyRemoteStream = (el) => {
-          el.srcObject = remoteStream;
-          el.muted = false;
-          el.volume = 1.0;
-          el.playsInline = true;
-          el.autoplay = true;
-          // Use a user-gesture-safe play with retry
-          const tryPlay = () => el.play().catch(e => {
-            console.warn('Remote play blocked, retrying:', e.name);
-            setTimeout(tryPlay, 500);
-          });
-          tryPlay();
-        };
+        remoteStreamRef.current = remoteStream;
 
         if (remoteVideoRef.current) {
-          applyRemoteStream(remoteVideoRef.current);
-          pendingRemoteStreamRef.current = null;
-        } else {
-          pendingRemoteStreamRef.current = remoteStream;
+          safePlayVideo(remoteVideoRef.current, remoteStream);
         }
         setConnectionStatus('Connected');
         setCallState('connected');
@@ -922,6 +899,10 @@ const InterviewRoom = () => {
     console.log('Sending chat message:', message);
 
     socketRef.current.emit('interview:send-chat', message);
+    
+    // Local fix: Append message immediately so sender sees their own message
+    setChatMessages(prev => [...prev, message]);
+    
     setChatInput('');
   };
 
@@ -940,7 +921,7 @@ const InterviewRoom = () => {
       }
 
       if (localStreamRef.current && localVideoRef.current) {
-        localVideoRef.current.srcObject = localStreamRef.current;
+        safePlayVideo(localVideoRef.current, localStreamRef.current);
       }
 
       if (call && call.peerConnection && localStreamRef.current) {
@@ -959,7 +940,7 @@ const InterviewRoom = () => {
         screenStreamRef.current = screenStream;
 
         if (localVideoRef.current) {
-          localVideoRef.current.srcObject = screenStream;
+          safePlayVideo(localVideoRef.current, screenStream);
         }
 
         if (call && call.peerConnection) {
@@ -1135,9 +1116,7 @@ const InterviewRoom = () => {
                     });
                   }
                 }}
-                onCanPlay={() => {
-                  console.log('Remote video can play');
-                }}
+                onCanPlay={() => remoteVideoRef.current?.play().catch(() => {})}
                 onPlay={() => {
                   console.log('Remote video started playing');
                 }}
@@ -1154,6 +1133,7 @@ const InterviewRoom = () => {
                 autoPlay
                 playsInline
                 muted={true}
+                onCanPlay={() => localVideoRef.current?.play().catch(() => {})}
                 className="w-full h-full object-cover"
               />
             )}

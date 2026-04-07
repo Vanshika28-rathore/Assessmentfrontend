@@ -301,8 +301,6 @@ export const useSupportSocket = ({
     isConnected,
     notifications,
     unreadCount,
-    addNotification,
-    clearNotifications,
     markAllRead,
     removeNotification,
     notificationPermission,

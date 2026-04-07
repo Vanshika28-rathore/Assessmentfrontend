@@ -8,6 +8,7 @@ import MyApplications from './MyApplications';
 import StudentSupportChatbot from '../components/chatbot/StudentSupportChatbot';
 import { apiFetch } from '../config/api';
 import shnoorLogo from '../assets/shnoor-logo1.png';
+import StudentSupportChatbot from '../components/chatbot/StudentSupportChatbot';
 
 const STUDENT_DASHBOARD_TABS = ['tests', 'interviews', 'job-board', 'my-applications'];
 
