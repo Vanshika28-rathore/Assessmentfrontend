@@ -160,44 +160,65 @@ export const useSupportSocket = ({
     
     window.addEventListener('admin-messages-all-read', handleAllRead);
 
-    // Create socket connection
-    const socket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 2000,
-      timeout: 20000,
-      autoConnect: true
-    });
+    // Create socket connection with error handling
+    let socket;
+    let connectionAttempts = 0;
+    const MAX_ATTEMPTS = 3;
 
-    socketRef.current = socket;
+    try {
+      socket = io(SOCKET_URL, {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: MAX_ATTEMPTS,
+        reconnectionDelay: 2000,
+        timeout: 10000,
+        autoConnect: true
+      });
 
-    socket.on('connect', () => {
-      console.log('[SupportSocket] Connected:', socket.id);
-      setIsConnected(true);
+      socketRef.current = socket;
 
-      // Join appropriate room based on user type
-      if (isAdmin) {
-        socket.emit('admin:join-support');
-        console.log('[SupportSocket] Admin joining support room');
-      } else if (rollNumber) {
-        socket.emit('student:join-support', { rollNumber, studentName });
-        console.log('[SupportSocket] Student joining support room:', `support-student-${rollNumber}`);
-      }
-    });
+      socket.on('connect', () => {
+        console.log('[SupportSocket] Connected:', socket.id);
+        setIsConnected(true);
+        connectionAttempts = 0; // Reset on successful connection
 
-    socket.on('disconnect', (reason) => {
-      console.log('[SupportSocket] Disconnected:', reason);
-      setIsConnected(false);
-    });
+        // Join appropriate room based on user type
+        if (isAdmin) {
+          socket.emit('admin:join-support');
+          console.log('[SupportSocket] Admin joining support room');
+        } else if (rollNumber) {
+          socket.emit('student:join-support', { rollNumber, studentName });
+          console.log('[SupportSocket] Student joining support room:', `support-student-${rollNumber}`);
+        }
+      });
 
-    socket.on('connect_error', (error) => {
-      console.error('[SupportSocket] Connection error:', error.message);
-      setIsConnected(false);
-    });
+      socket.on('disconnect', (reason) => {
+        console.log('[SupportSocket] Disconnected:', reason);
+        setIsConnected(false);
+      });
+
+      socket.on('connect_error', (error) => {
+        connectionAttempts++;
+        console.warn(`[SupportSocket] Connection error (${connectionAttempts}/${MAX_ATTEMPTS}):`, error.message);
+        setIsConnected(false);
+        
+        // Stop trying after max attempts
+        if (connectionAttempts >= MAX_ATTEMPTS) {
+          console.warn('[SupportSocket] Max connection attempts reached, stopping reconnection');
+          socket.disconnect();
+        }
+      });
+
+      socket.on('reconnect_failed', () => {
+        console.warn('[SupportSocket] Reconnection failed after max attempts');
+        setIsConnected(false);
+      });
+    } catch (error) {
+      console.error('[SupportSocket] Failed to initialize socket:', error);
+    }
 
     // Admin notifications - new student message
-    if (isAdmin) {
+    if (isAdmin && socket) {
       socket.on('support:new-student-message', (data) => {
         console.log('[SupportSocket] New student message received:', data);
         addNotification({
@@ -254,6 +275,7 @@ export const useSupportSocket = ({
         socket.off('connect');
         socket.off('disconnect');
         socket.off('connect_error');
+        socket.off('reconnect_failed');
         socket.off('support:new-student-message');
         socket.off('support:unread-count-update');
         socket.off('support:new-admin-reply');
