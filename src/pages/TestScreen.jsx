@@ -1088,10 +1088,10 @@ int main() {
         )}
         {/* Coding Question - 3-Column Layout */}
         {isCodingQuestion && (
-          <main className="flex-1 flex flex-row bg-shnoor-lavender overflow-hidden coding-container">
+          <main className="flex-1 flex flex-col lg:flex-row bg-shnoor-lavender overflow-y-auto lg:overflow-hidden coding-container">
 
             {/* Column 1 - Question Palette */}
-            <aside className="w-52 bg-white border-r border-shnoor-mist flex flex-col flex-shrink-0 overflow-y-auto">
+            <aside className="w-full lg:w-52 h-48 lg:h-auto bg-white border-b lg:border-b-0 lg:border-r border-shnoor-mist flex flex-col flex-shrink-0 order-3 lg:order-1 overflow-y-auto">
               <div className="p-3 border-b border-shnoor-mist">
                 <h3 className="font-bold text-shnoor-navy mb-3 text-sm">Question Palette</h3>
                 {questions.length > 0 && (
@@ -1192,10 +1192,21 @@ int main() {
 
             {/* Column 2 - Problem Description (resizable) */}
             <div
-              className="bg-white border-r border-shnoor-light overflow-y-auto flex-shrink-0 shadow-lg"
-              style={{ width: `${leftPanelWidth}%`, minWidth: '18%', maxWidth: '45%' }}
+              className="bg-white border-b lg:border-b-0 lg:border-r border-shnoor-light overflow-y-auto flex-shrink-0 shadow-lg order-1 lg:order-2 w-full coding-desc-panel"
+              style={{ '--desk-width': `${leftPanelWidth}%`, width: '100%' }}
             >
-              <div className="p-6">
+              <style>
+                {`
+                  @media (min-width: 1024px) {
+                    .coding-desc-panel {
+                      width: var(--desk-width) !important;
+                      min-width: 18% !important;
+                      max-width: 45% !important;
+                    }
+                  }
+                `}
+              </style>
+              <div className="p-4 sm:p-6">
                 {/* Title */}
                 <div className="mb-4">
                   <h3 className="text-xl font-bold text-shnoor-navy mb-2">{currentQ.title}</h3>
@@ -1250,13 +1261,13 @@ int main() {
 
             {/* Horizontal Resize Handle */}
             <div
-              className="w-1 bg-shnoor-light hover:bg-shnoor-indigo cursor-col-resize flex-shrink-0 transition-colors duration-200"
+              className="hidden lg:block w-1 bg-shnoor-light hover:bg-shnoor-indigo cursor-col-resize flex-shrink-0 transition-colors duration-200 order-3"
               onMouseDown={handleHorizontalMouseDown}
               style={{ cursor: 'col-resize' }}
             />
 
             {/* Column 3 - Code Editor + Console */}
-            <div className="flex-1 flex flex-col bg-shnoor-navy code-editor-container min-w-0 shadow-xl">
+            <div className="flex-1 flex flex-col bg-shnoor-navy code-editor-container min-w-0 shadow-xl order-2 lg:order-4 min-h-[600px] lg:min-h-0">
               {/* Editor Header */}
               <div className="flex items-center justify-between px-4 py-2 bg-shnoor-navy border-b border-shnoor-indigo/30">
                 <select
@@ -1635,16 +1646,25 @@ int main() {
               {/* Vertical Resize Handle */}
               {/* Vertical Resize Handle */}
               <div
-                className="h-1 bg-shnoor-indigo/30 hover:bg-shnoor-indigo cursor-row-resize flex-shrink-0 transition-colors duration-200"
+                className="hidden lg:block h-1 bg-shnoor-indigo/30 hover:bg-shnoor-indigo cursor-row-resize flex-shrink-0 transition-colors duration-200"
                 onMouseDown={handleVerticalMouseDown}
                 style={{ cursor: 'row-resize' }}
               />
 
               {/* Test Cases / Console Tabs */}
               <div
-                className="border-t border-shnoor-indigo/30 flex flex-col"
-                style={{ height: window.innerWidth >= 1024 ? `${consolePanelHeight}px` : 'auto', minHeight: window.innerWidth < 1024 ? '200px' : 'auto', maxHeight: window.innerWidth < 1024 ? '300px' : 'none' }}
+                className="border-t border-shnoor-indigo/30 flex flex-col test-cases-panel min-h-[300px] lg:min-h-0"
+                style={{ '--console-height': `${consolePanelHeight}px` }}
               >
+                <style>
+                  {`
+                    @media (min-width: 1024px) {
+                      .test-cases-panel {
+                        height: var(--console-height) !important;
+                      }
+                    }
+                  `}
+                </style>
                 <div className="flex items-center space-x-4 px-4 py-2 bg-shnoor-navy border-b border-shnoor-indigo/30">
                   <button className="text-sm font-medium text-shnoor-lavender border-b-2 border-shnoor-lavender pb-2">
                     Test Cases
