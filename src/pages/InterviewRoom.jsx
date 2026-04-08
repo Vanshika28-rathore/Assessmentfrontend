@@ -1222,7 +1222,7 @@ const InterviewRoom = () => {
             )}
           </div>
           {/* Bottom Controls and Local Video */}
-          <div className="flex flex-col sm:flex-row items-center sm:items-end space-y-3 sm:space-y-0 sm:space-x-4">
+          <div className="flex flex-wrap sm:flex-nowrap items-center sm:items-end space-y-3 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
             {/* Local Video (Picture-in-Picture when in call) */}
             {call && localStreamRef.current && (
               <div className="w-32 h-24 sm:w-64 sm:h-36 rounded-lg bg-gray-800 overflow-hidden relative flex-shrink-0 self-end sm:self-auto shadow-lg z-10 bottom-16 sm:bottom-0 absolute sm:relative right-4 sm:right-0">

@@ -357,7 +357,7 @@ const StudentInterviews = () => {
                       <button
                         onClick={() => canJoin && joinInterview(interview.id)}
                         disabled={!canJoin}
-                        className={`flex items-center space-x-2 px-6 py-3 rounded-xl font-semibold transition-colors shadow-[0_8px_30px_rgba(14,14,39,0.06)] ${canJoin
+                        className={`flex items-center justify-center w-full sm:w-auto space-x-2 px-6 py-3 rounded-xl font-semibold transition-colors shadow-[0_8px_30px_rgba(14,14,39,0.06)] ${canJoin
                             ? 'bg-shnoor-indigo hover:bg-shnoor-navy text-white hover:shadow-[0_8px_30px_rgba(14,14,39,0.12)]'
                             : 'bg-shnoor-mist/40 text-shnoor-indigoMedium cursor-not-allowed'
                           }`}
@@ -391,11 +391,11 @@ const StudentInterviews = () => {
               return (
                 <div
                   key={interview.id}
-                  className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(14,14,39,0.06)] border border-shnoor-light p-6 opacity-75"
+                  className="bg-white justify-between rounded-2xl shadow-[0_8px_30px_rgba(14,14,39,0.06)] border border-shnoor-light p-6 opacity-75"
                 >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-3">
+                  <div className="flex flex-col sm:flex-row justify-between items-start gap-4 sm:gap-0">
+                    <div className="flex-1 w-full">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3">
                         <h3 className="text-lg font-bold text-shnoor-navy">
                           {interview.test_title}
                         </h3>
