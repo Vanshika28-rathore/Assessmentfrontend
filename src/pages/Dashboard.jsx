@@ -8,6 +8,7 @@ import MyApplications from './MyApplications';
 import StudentSupportChatbot from '../components/chatbot/StudentSupportChatbot';
 import { apiFetch } from '../config/api';
 import shnoorLogo from '../assets/shnoor-logo1.png';
+import ThemeSelector from '../components/ThemeSelector';
 
 const STUDENT_DASHBOARD_TABS = ['tests', 'interviews', 'job-board', 'my-applications'];
 
@@ -368,7 +369,7 @@ const Dashboard = () => {
         <div className="w-full max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center border-white/10 sm:border-transparent sm:h-16">
             <div className="flex items-center space-x-3 sm:space-x-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl overflow-hidden shadow-sm flex-shrink-0 bg-white">
+              <div className="site-header-logo w-10 h-10 sm:w-12 sm:h-12 rounded-xl overflow-hidden shadow-sm flex-shrink-0 bg-white">
                 <img
                   src={shnoorLogo}
                   alt="Shnoor Logo"
@@ -377,7 +378,7 @@ const Dashboard = () => {
               </div>
               <div>
                 <h1 className="text-white font-bold text-base sm:text-lg leading-tight">Assessment Portal</h1>
-                <p className="text-shnoor-light opacity-80 text-[10px] sm:text-xs">Student Dashboard</p>
+                <p className="site-header-subtitle text-shnoor-light opacity-80 text-[10px] sm:text-xs">Student Dashboard</p>
               </div>
             </div>
 
@@ -388,7 +389,7 @@ const Dashboard = () => {
               </div>
               <button
                 onClick={handleLogout}
-                className="flex items-center justify-center space-x-2 px-3 sm:px-5 py-2 !h-9 sm:!h-10 text-white bg-transparent border border-white/20 hover:bg-white/10 rounded-lg transition-colors text-xs sm:text-sm font-medium"
+                className="admin-logout-btn flex items-center justify-center space-x-2 px-3 sm:px-5 py-2 !h-9 sm:!h-10 text-white bg-transparent border border-white/20 hover:bg-white/10 rounded-lg transition-colors text-xs sm:text-sm font-medium"
               >
                 <LogOut size={16} className="hidden sm:block" />
                 <LogOut size={14} className="sm:hidden" />

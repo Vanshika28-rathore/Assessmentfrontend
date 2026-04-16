@@ -43,6 +43,8 @@ const TestScreen = () => {
 
   // Warnings sidebar state
   const [warningsSidebarCollapsed, setWarningsSidebarCollapsed] = useState(true);
+  const [activeCodingTab, setActiveCodingTab] = useState('questions'); // questions, description, code
+  const [bottomPanelTab, setBottomPanelTab] = useState('testCases'); // testCases, console
 
 
   // Resizable panel states
@@ -95,7 +97,7 @@ int main() {
 
     // Clean up Docker noise for display only
     return error
-      .replace(/docker run --rm --memory=256m.*$/gm, '')
+      .replace(/Tip: Install JDK \(javac\) or start Docker Desktop\./g, 'Tip: To fix this, please install Java JDK on your computer or start Docker Desktop.')
       .replace(/Command failed with exit code \d+:\s*/g, '')
       .replace(/Error: Command failed:\s*/g, '')
       .replace(/^.*alpine.*$/gm, '')
@@ -1086,12 +1088,46 @@ int main() {
             </div>
           </main>
         )}
-        {/* Coding Question - 3-Column Layout */}
+        {/* Coding Question - Tabbed Layout */}
         {isCodingQuestion && (
-          <main className="flex-1 flex flex-col lg:flex-row bg-shnoor-lavender overflow-y-auto lg:overflow-hidden coding-container">
+          <div className="flex-1 flex flex-col bg-shnoor-lavender overflow-hidden coding-container relative">
+            {/* Tab Switcher - Mobile Only */}
+            <div className="flex bg-white border-b border-gray-200 sticky top-0 z-30 flex-shrink-0 shadow-md w-full justify-center">
+              <div className="flex w-full max-w-4xl">
+                {['questions', 'description', 'code'].map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveCodingTab(tab)}
+                    className={`flex-1 py-4 text-xs font-bold uppercase tracking-widest transition-all relative ${activeCodingTab === tab ? 'text-shnoor-indigo' : 'text-slate-400 hover:text-slate-600'}`}
+                  >
+                    <div className="flex flex-col items-center gap-1">
+                      {tab === 'questions' ? (
+                        <span>Palette</span>
+                      ) : tab === 'description' ? (
+                        <span className="hidden sm:inline">Description</span>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="relative">
+                            <div className="absolute -top-1 -right-1 w-2 h-2 bg-shnoor-success rounded-full animate-ping"></div>
+                          </div>
+                          <span className="hidden sm:inline">Code Editor</span>
+                          <span className="sm:hidden">Editor</span>
+                        </div>
+                      )}
+                    </div>
+                    {activeCodingTab === tab && (
+                      <div className="absolute bottom-0 left-0 right-0 h-1 bg-shnoor-indigo shadow-[0_-2px_10px_rgba(79,70,229,0.3)]" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Panels Area */}
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
 
             {/* Column 1 - Question Palette */}
-            <aside className="w-full lg:w-52 h-48 lg:h-auto bg-white border-b lg:border-b-0 lg:border-r border-shnoor-mist flex flex-col flex-shrink-0 order-3 lg:order-1 overflow-y-auto">
+            <aside className={`flex-1 bg-white w-full lg:w-52 border-r border-shnoor-mist flex-col flex-shrink-0 overflow-y-auto ${activeCodingTab === 'questions' ? 'flex w-full' : 'hidden'} pb-16 lg:pb-0`}>
               <div className="p-3 border-b border-shnoor-mist">
                 <h3 className="font-bold text-shnoor-navy mb-3 text-sm">Question Palette</h3>
                 {questions.length > 0 && (
@@ -1192,20 +1228,9 @@ int main() {
 
             {/* Column 2 - Problem Description (resizable) */}
             <div
-              className="bg-white border-b lg:border-b-0 lg:border-r border-shnoor-light overflow-y-auto flex-shrink-0 shadow-lg order-1 lg:order-2 w-full coding-desc-panel"
-              style={{ '--desk-width': `${leftPanelWidth}%`, width: '100%' }}
+              className={`flex-1 bg-white overflow-y-auto ${activeCodingTab === 'description' ? 'flex flex-col' : 'hidden'} custom-scrollbar pb-16 lg:pb-0`}
             >
-              <style>
-                {`
-                  @media (min-width: 1024px) {
-                    .coding-desc-panel {
-                      width: var(--desk-width) !important;
-                      min-width: 18% !important;
-                      max-width: 45% !important;
-                    }
-                  }
-                `}
-              </style>
+
               <div className="p-4 sm:p-6">
                 {/* Title */}
                 <div className="mb-4">
@@ -1259,15 +1284,8 @@ int main() {
               </div>
             </div>
 
-            {/* Horizontal Resize Handle */}
-            <div
-              className="hidden lg:block w-1 bg-shnoor-light hover:bg-shnoor-indigo cursor-col-resize flex-shrink-0 transition-colors duration-200 order-3"
-              onMouseDown={handleHorizontalMouseDown}
-              style={{ cursor: 'col-resize' }}
-            />
-
             {/* Column 3 - Code Editor + Console */}
-            <div className="flex-1 flex flex-col bg-shnoor-navy code-editor-container min-w-0 shadow-xl order-2 lg:order-4 min-h-[600px] lg:min-h-0">
+            <div className={`flex-1 flex-col bg-shnoor-navy code-editor-container min-w-0 shadow-xl ${activeCodingTab === 'code' ? 'flex' : 'hidden'} pb-16 lg:pb-0`}>
               {/* Editor Header */}
               <div className="flex items-center justify-between px-4 py-2 bg-shnoor-navy border-b border-shnoor-indigo/30">
                 <select
@@ -1653,129 +1671,153 @@ int main() {
 
               {/* Test Cases / Console Tabs */}
               <div
-                className="border-t border-shnoor-indigo/30 flex flex-col test-cases-panel min-h-[300px] lg:min-h-0"
-                style={{ '--console-height': `${consolePanelHeight}px` }}
+                className="border-t border-shnoor-indigo/30 flex flex-col"
+                style={{ height: window.innerWidth >= 1024 ? `${consolePanelHeight}px` : 'auto', minHeight: window.innerWidth < 1024 ? '200px' : 'auto', maxHeight: window.innerWidth < 1024 ? '300px' : 'none' }}
               >
-                <style>
-                  {`
-                    @media (min-width: 1024px) {
-                      .test-cases-panel {
-                        height: var(--console-height) !important;
-                      }
-                    }
-                  `}
-                </style>
                 <div className="flex items-center space-x-4 px-4 py-2 bg-shnoor-navy border-b border-shnoor-indigo/30">
-                  <button className="text-sm font-medium text-shnoor-lavender border-b-2 border-shnoor-lavender pb-2">
+                  <button
+                    onClick={() => setBottomPanelTab('testCases')}
+                    className={`text-sm font-medium pb-2 transition-all ${bottomPanelTab === 'testCases' ? 'text-shnoor-lavender border-b-2 border-shnoor-lavender' : 'text-shnoor-soft hover:text-shnoor-lavender'}`}
+                  >
                     Test Cases
                   </button>
-                  <button className="text-sm font-medium text-shnoor-soft hover:text-shnoor-lavender pb-2 transition-colors">
+                  <button
+                    onClick={() => setBottomPanelTab('console')}
+                    className={`text-sm font-medium pb-2 transition-all ${bottomPanelTab === 'console' ? 'text-shnoor-lavender border-b-2 border-shnoor-lavender' : 'text-shnoor-soft hover:text-shnoor-lavender'}`}
+                  >
                     Console
                   </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 bg-shnoor-navy">
-                  {codingConsoleOutput[currentQuestion]?.running ? (
-                    <div className="flex items-center space-x-2 text-shnoor-warning">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-shnoor-warning"></div>
-                      <span className="text-sm">Running test cases...</span>
-                    </div>
-                  ) : codingConsoleOutput[currentQuestion]?.results ? (
-                    <div className="space-y-3">
-                      {/* Summary */}
-                      {codingConsoleOutput[currentQuestion]?.summary && (
-                        <div className="mb-4 p-3 bg-shnoor-indigo/20 rounded-lg border border-shnoor-indigo/30">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-semibold text-shnoor-lavender">Test Results Summary</span>
-                            <span className="text-xs text-shnoor-soft">
-                              {codingConsoleOutput[currentQuestion].timestamp}
-                            </span>
+                  {bottomPanelTab === 'testCases' ? (
+                    codingConsoleOutput[currentQuestion]?.running ? (
+                      <div className="flex items-center space-x-2 text-shnoor-warning">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-shnoor-warning"></div>
+                        <span className="text-sm">Running test cases...</span>
+                      </div>
+                    ) : codingConsoleOutput[currentQuestion]?.results ? (
+                      <div className="space-y-3">
+                        {/* Summary */}
+                        {codingConsoleOutput[currentQuestion]?.summary && (
+                          <div className="mb-4 p-3 bg-shnoor-indigo/20 rounded-lg border border-shnoor-indigo/30">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-semibold text-shnoor-lavender">Test Results Summary</span>
+                              <span className="text-xs text-shnoor-soft">
+                                {codingConsoleOutput[currentQuestion].timestamp}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4 text-sm">
+                              <div className="text-center">
+                                <div className="text-lg font-bold text-shnoor-success">
+                                  {codingConsoleOutput[currentQuestion].summary.passedTestCases}
+                                </div>
+                                <div className="text-shnoor-soft">Passed</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-lg font-bold text-shnoor-danger">
+                                  {codingConsoleOutput[currentQuestion].summary.failedTestCases}
+                                </div>
+                                <div className="text-shnoor-soft">Failed</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-lg font-bold text-shnoor-lavender">
+                                  {codingConsoleOutput[currentQuestion].summary.percentage}%
+                                </div>
+                                <div className="text-shnoor-soft">Score</div>
+                              </div>
+                            </div>
                           </div>
-                          <div className="grid grid-cols-3 gap-4 text-sm">
-                            <div className="text-center">
-                              <div className="text-lg font-bold text-shnoor-success">
-                                {codingConsoleOutput[currentQuestion].summary.passedTestCases}
-                              </div>
-                              <div className="text-shnoor-soft">Passed</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-lg font-bold text-shnoor-danger">
-                                {codingConsoleOutput[currentQuestion].summary.failedTestCases}
-                              </div>
-                              <div className="text-shnoor-soft">Failed</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-lg font-bold text-shnoor-lavender">
-                                {codingConsoleOutput[currentQuestion].summary.percentage}%
-                              </div>
-                              <div className="text-shnoor-soft">Score</div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                        )}
 
-                      {/* Individual Test Results */}
-                      {codingConsoleOutput[currentQuestion].results.map((result, idx) => (
-                        <div
-                          key={idx}
-                          className={`p-3 rounded-lg border shadow-sm ${result.passed
-                            ? 'bg-shnoor-success/20 border-shnoor-success/50'
-                            : 'bg-shnoor-danger/20 border-shnoor-danger/50'
-                            }`}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className={`text-sm font-semibold ${result.passed ? 'text-shnoor-success' : 'text-shnoor-danger'}`}>
-                              TEST CASE {result.testCase}: {result.passed ? '✓ PASSED' : '✗ FAILED'}
-                            </span>
-                            <span className="text-xs text-shnoor-soft">{result.executionTime}</span>
-                          </div>
-                          <div className="text-xs font-mono space-y-1">
-                            <div>
-                              <span className="text-shnoor-soft">Input: </span>
-                              <span className="text-shnoor-lavender">{result.input}</span>
+                        {/* Individual Test Results */}
+                        {codingConsoleOutput[currentQuestion].results.map((result, idx) => (
+                          <div
+                            key={idx}
+                            className={`p-3 rounded-lg border shadow-sm ${result.passed
+                              ? 'bg-shnoor-success/20 border-shnoor-success/50'
+                              : 'bg-shnoor-danger/20 border-shnoor-danger/50'
+                              }`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className={`text-sm font-semibold ${result.passed ? 'text-shnoor-success' : 'text-shnoor-danger'}`}>
+                                TEST CASE {result.testCase}: {result.passed ? '✓ PASSED' : '✗ FAILED'}
+                              </span>
+                              <span className="text-xs text-shnoor-soft">{result.executionTime}</span>
                             </div>
-                            <div>
-                              <span className="text-shnoor-soft">Expected: </span>
-                              <span className="text-shnoor-lavender">{result.expectedOutput}</span>
-                            </div>
-                            <div>
-                              <span className="text-shnoor-soft">Got: </span>
-                              <div className={`mt-1 ${result.passed ? 'text-shnoor-success' : 'text-shnoor-danger'}`}>
-                                {result.actualOutput && (result.actualOutput.includes('🐍') || result.actualOutput.includes('☕') || result.actualOutput.includes('🔧') || result.actualOutput.includes('🟨') || result.actualOutput.includes('Error:')) ? (
-                                  <pre className="text-sm font-mono whitespace-pre-wrap leading-relaxed bg-gray-900/30 p-2 rounded border border-gray-600/30">
-                                    {formatErrorForDisplay(result.actualOutput)}
-                                  </pre>
-                                ) : (
-                                  <span className="font-mono text-sm">
-                                    {result.actualOutput}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            {result.error && (
-                              <div className="mt-2">
-                                <span className="text-shnoor-soft text-xs uppercase tracking-wide">Error Details:</span>
-                                <div className="mt-1 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
-                                  <pre className="text-shnoor-danger text-sm font-mono whitespace-pre-wrap leading-relaxed">
-                                    {formatErrorForDisplay(result.error)}
-                                  </pre>
+                            <div className="text-xs font-mono space-y-1">
+                              {!result.isHidden && (
+                                <>
+                                  <div>
+                                    <span className="text-shnoor-soft">Input: </span>
+                                    <span className="text-shnoor-lavender">{result.input}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-shnoor-soft">Expected: </span>
+                                    <span className="text-shnoor-lavender">{result.expectedOutput}</span>
+                                  </div>
+                                </>
+                              )}
+                              <div>
+                                <span className="text-shnoor-soft">Got: </span>
+                                <div className={`mt-1 ${result.passed ? 'text-shnoor-success' : 'text-shnoor-danger'}`}>
+                                  {result.actualOutput && (result.actualOutput.includes('🐍') || result.actualOutput.includes('☕') || result.actualOutput.includes('🔧') || result.actualOutput.includes('🟨') || result.actualOutput.includes('Error:')) ? (
+                                    <pre className="text-sm font-mono whitespace-pre-wrap leading-relaxed bg-gray-900/30 p-2 rounded border border-gray-600/30">
+                                      {formatErrorForDisplay(result.actualOutput)}
+                                    </pre>
+                                  ) : (
+                                    <span className="font-mono text-sm">
+                                      {result.actualOutput}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
-                            )}
+                              {result.error && (
+                                <div className="mt-2">
+                                  <span className="text-shnoor-soft text-xs uppercase tracking-wide">Error Details:</span>
+                                  <div className="mt-1 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
+                                    <pre className="text-shnoor-danger text-sm font-mono whitespace-pre-wrap leading-relaxed">
+                                      {formatErrorForDisplay(result.error)}
+                                    </pre>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center text-shnoor-soft text-sm py-8">
+                        Click "Run" or "Submit" to see test results
+                      </div>
+                    )
                   ) : (
-                    <div className="text-center text-shnoor-soft text-sm py-8">
-                      Click "Run" to test your code
+                    /* Console View */
+                    <div className="font-mono text-sm text-shnoor-lavender bg-black/30 p-4 rounded-lg min-h-[100px] border border-shnoor-indigo/20">
+                      {codingConsoleOutput[currentQuestion]?.running ? (
+                        <div className="flex items-center space-x-2 text-shnoor-warning">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-shnoor-warning"></div>
+                          <span>Executing code...</span>
+                        </div>
+                      ) : (
+                        <div className="whitespace-pre-wrap">
+                          {codingConsoleOutput[currentQuestion]?.results?.map((r, i) => (
+                            <div key={i} className="mb-2">
+                              <span className="text-shnoor-soft">[{codingConsoleOutput[currentQuestion].timestamp}] </span>
+                              <span className={r.passed ? 'text-shnoor-success' : 'text-shnoor-danger'}>
+                                {r.actualOutput || r.error || 'No output'}
+                              </span>
+                            </div>
+                          )) || 'No execution history'}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center justify-between px-4 py-3 bg-shnoor-navy border-t border-shnoor-indigo/30">
+              {/* Action Buttons - Desktop Only */}
+              <div className="hidden lg:flex items-center justify-between px-4 py-3 bg-shnoor-navy border-t border-shnoor-indigo/30">
                 <div className="flex items-center space-x-3">
                   <button
                     onClick={handlePrevious}
@@ -1806,7 +1848,40 @@ int main() {
                 </div>
               </div>
             </div>
-          </main>
+
+            {/* Action Buttons - Mobile Fixed Bottom Bar */}
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 bg-shnoor-navy border-t border-shnoor-indigo/30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+              <div className="flex flex-1 justify-between items-center max-w-lg mx-auto w-full">
+                <button
+                  onClick={handlePrevious}
+                  disabled={currentQuestion === 0}
+                  className={`
+                    flex items-center justify-center space-x-2 px-4 py-2.5 rounded-lg font-medium transition-all duration-200 flex-1 mr-2
+                    ${currentQuestion === 0
+                      ? 'bg-shnoor-indigo/20 text-shnoor-soft cursor-not-allowed'
+                      : 'bg-shnoor-indigo border border-shnoor-indigo/50 text-white shadow-md'}
+                  `}
+                >
+                  <ChevronLeft size={18} />
+                  <span>Previous</span>
+                </button>
+                <button
+                  onClick={handleNext}
+                  disabled={currentQuestion >= totalQuestions - 1}
+                  className={`
+                    flex items-center justify-center space-x-2 px-4 py-2.5 rounded-lg font-medium transition-all duration-200 flex-1 ml-2
+                    ${currentQuestion >= totalQuestions - 1
+                      ? 'bg-shnoor-indigo/20 text-shnoor-soft cursor-not-allowed'
+                      : 'bg-shnoor-indigo border border-shnoor-indigo/50 text-white shadow-md'}
+                  `}
+                >
+                  <span>Next</span>
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            </div>
+            </div>
+          </div>
         )}
 
         {/* Warnings Sidebar - only in MCQ view */}

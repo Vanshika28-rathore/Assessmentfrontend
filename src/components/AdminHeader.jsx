@@ -4,6 +4,7 @@ import { Video, LogOut, Settings, MessageSquare, X, Menu } from 'lucide-react';
 import Button from './Button';
 import { useSupportSocket } from '../hooks/useSupportSocket';
 import shnoorLogo from '../assets/shnoor-logo1.png';
+import ThemeSelector from './ThemeSelector';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -106,7 +107,7 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
           <div className="flex items-center gap-3 sm:gap-4">
             {/* Logo icon */}
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0 bg-white">
+            <div className="site-header-logo w-10 h-10 sm:w-12 sm:h-12 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0 bg-white">
               <img
                 src={shnoorLogo}
                 alt="Shnoor Logo"
@@ -115,12 +116,13 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
             </div>
             <div className="flex-1 min-w-0">
               <h1 className="text-white font-bold text-base sm:text-lg leading-tight truncate">Admin Dashboard</h1>
-              <p className="text-shnoor-light opacity-80 text-[10px] sm:text-xs truncate">MCQ Management System</p>
+              <p className="site-header-subtitle text-shnoor-light opacity-80 text-[10px] sm:text-xs truncate">MCQ Management System</p>
             </div>
           </div>
 
           {/* Right Side: Desktop Navigation */}
           <div className="hidden sm:flex items-center gap-4">
+            <ThemeSelector />
             <Button
               variant="primary"
               className="!h-10 !px-5 text-sm bg-shnoor-indigo hover:bg-[#6b6be5] hover:shadow-[0_0_15px_rgba(107,107,229,0.4)] hover:-translate-y-0.5 transition-all border-0 relative"
@@ -152,7 +154,7 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
             </Button>
             <Button
               variant="secondary"
-              className="!h-10 !px-5 text-sm bg-transparent hover:bg-white/10 text-white border border-white/20"
+              className="admin-logout-btn !h-10 !px-5 text-sm bg-transparent hover:bg-white/10 text-white border border-white/20"
               onClick={handleLogout}
             >
               <LogOut size={16} className="mr-2" />
@@ -161,7 +163,8 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
           </div>
 
           {/* Mobile Menu Toggle Button */}
-          <div className="sm:hidden flex items-center">
+          <div className="sm:hidden flex items-center gap-2">
+            <ThemeSelector />
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="text-white p-2 hover:bg-white/10 rounded-lg transition-colors relative min-w-[44px] min-h-[44px] flex items-center justify-center touch-manipulation"

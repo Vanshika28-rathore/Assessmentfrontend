@@ -4,6 +4,7 @@ import Button from '../components/Button';
 import Card from '../components/Card';
 import shnoorlogo1 from '../assets/shnoor-logo1.png';
 import shnoorLogo from '../assets/shnoor-logo.png';
+import ThemeSelector from '../components/ThemeSelector';
 
 const Icon = ({ d, cls = 'w-6 h-6', stroke = 2 }) => (
   <svg className={cls} fill="none" stroke="currentColor" strokeWidth={stroke} viewBox="0 0 24 24">
@@ -56,6 +57,7 @@ const LandingPage = () => (
           </div>
         </div>
         <div className="flex flex-wrap justify-center items-center gap-4 sm:gap-6">
+          <ThemeSelector variant="light" />
           <Link to="/login" className="text-sm sm:text-base font-semibold text-shnoor-navy hover:text-shnoor-indigo transition-colors px-2 sm:px-4 py-2">
             Sign In
           </Link>

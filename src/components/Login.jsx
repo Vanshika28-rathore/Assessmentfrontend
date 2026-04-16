@@ -5,6 +5,7 @@ import { useAdminAuth } from '../contexts/AdminAuthContext';
 import Button from './Button';
 import Badge from './Badge';
 import InputField from './InputField';  
+import ThemeSelector from './ThemeSelector';
 
 const shnoorLogo = '/favicon.png';
 
@@ -177,7 +178,10 @@ const Login = () => {
   };
 
   return (
-    <main className="min-h-[100dvh] w-full flex flex-col lg:flex-row font-['Plus_Jakarta_Sans',sans-serif]">
+    <main className="min-h-[100dvh] w-full flex flex-col lg:flex-row font-['Plus_Jakarta_Sans',sans-serif] relative">
+      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6 lg:right-8 lg:top-8">
+        <ThemeSelector variant="light" />
+      </div>
       {/* ── LEFT PANEL (dark) ─────────────────────────────── */}
       <div className="hidden lg:flex lg:w-[45%] flex-col justify-between bg-shnoor-navy px-14 py-12 relative overflow-hidden">
         {/* Decorative gradient orbs */}
@@ -287,6 +291,13 @@ const Login = () => {
                 }}
                 disabled={isLoading}
                 autoComplete="username"
+                
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    document.getElementById('password')?.focus();
+                  }
+                }}
               />
               {errors.email && <p className="text-xs text-shnoor-danger mt-1">{errors.email}</p>}
             </div>

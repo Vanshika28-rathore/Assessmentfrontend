@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, FileSpreadsheet, LogOut, Download, ArrowLeft,
-  Trash2, Eye, Users, CheckCircle, XCircle, UserCheck, ChevronDown, ChevronRight, Video, Loader2, X, Building2, MoreVertical, Copy, AlertCircle, Pencil, MessageSquare, Star, TrendingUp, BarChart3, Calendar, Filter, CheckSquare, Briefcase
+  Trash2, Eye, Users, CheckCircle, XCircle, UserCheck, ChevronDown, ChevronRight, Video, Loader2, X, Building2, MoreVertical, Copy, AlertCircle, Pencil, MessageSquare, Star, TrendingUp, BarChart3, Calendar, Filter, CheckSquare, Briefcase, Search
 } from 'lucide-react';
 
 import axios from 'axios';
@@ -81,6 +81,8 @@ const AdminDashboard = () => {
   const [selectedTestsForInstitute, setSelectedTestsForInstitute] = useState([]);
   const [isAssigningTestToInstitute, setIsAssigningTestToInstitute] = useState(false);
   const [isInstituteTestDropdownOpen, setIsInstituteTestDropdownOpen] = useState(false);
+  const [selectedTestsForUnassign, setSelectedTestsForUnassign] = useState([]);
+  const [isUnassigningTests, setIsUnassigningTests] = useState(false);
 
   // Student Management States
   const [showStudentManagementModal, setShowStudentManagementModal] = useState(false);
@@ -92,6 +94,7 @@ const AdminDashboard = () => {
   const [isAssigningTestInModal, setIsAssigningTestInModal] = useState(false);
   const [isStudentTestDropdownOpen, setIsStudentTestDropdownOpen] = useState(false);
   const [selectionRange, setSelectionRange] = useState({ start: '', end: '' });
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [newStudentData, setNewStudentData] = useState({
     full_name: '',
     email: '',
@@ -99,6 +102,14 @@ const AdminDashboard = () => {
     institute: ''
   });
   const [isAddingStudent, setIsAddingStudent] = useState(false);
+
+  // Student Tests Modal States
+  const [showStudentTestsModal, setShowStudentTestsModal] = useState(false);
+  const [selectedStudentForTests, setSelectedStudentForTests] = useState(null);
+  const [studentAssignedTests, setStudentAssignedTests] = useState([]);
+  const [isLoadingStudentTests, setIsLoadingStudentTests] = useState(false);
+  const [isUnassigningStudentTest, setIsUnassigningStudentTest] = useState(false);
+  const [expandedStudentTests, setExpandedStudentTests] = useState({});
 
   // Search, Filter, Sort States
   const [searchTerm, setSearchTerm] = useState('');
@@ -1548,6 +1559,80 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleBulkUnassignTests = async () => {
+    if (selectedTestsForUnassign.length === 0) {
+      alert('Please select tests to unassign');
+      return;
+    }
+
+    const confirmMessage = `Are you sure you want to unassign ${selectedTestsForUnassign.length} test${selectedTestsForUnassign.length !== 1 ? 's' : ''} from this institute?`;
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    setIsUnassigningTests(true);
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      let successCount = 0;
+      let errors = [];
+
+      for (const testId of selectedTestsForUnassign) {
+        try {
+          const response = await apiFetch(`api/institutes/${selectedInstituteForTests.id}/unassign-test/${testId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          const data = await response.json();
+
+          if (response.ok && data.success) {
+            successCount++;
+          } else {
+            const test = assignedTests.find(t => t.id === testId);
+            errors.push(`${test?.title || `Test ${testId}`}: ${data.message}`);
+          }
+        } catch (error) {
+          const test = assignedTests.find(t => t.id === testId);
+          errors.push(`${test?.title || `Test ${testId}`}: ${error.message}`);
+        }
+      }
+
+      let summaryMessage = `Successfully unassigned ${successCount} test${successCount !== 1 ? 's' : ''}`;
+      if (errors.length > 0) {
+        summaryMessage += `\n\nFailed to unassign ${errors.length} test${errors.length !== 1 ? 's' : ''}:\n${errors.join('\n')}`;
+      }
+
+      alert(summaryMessage);
+      setSelectedTestsForUnassign([]);
+      handleViewAssignedTests(selectedInstituteForTests);
+      fetchAllInstitutes();
+    } catch (error) {
+      console.error('Error bulk unassigning tests:', error);
+      alert('Failed to unassign tests');
+    } finally {
+      setIsUnassigningTests(false);
+    }
+  };
+
+  const toggleTestForUnassign = (testId) => {
+    setSelectedTestsForUnassign(prev =>
+      prev.includes(testId)
+        ? prev.filter(id => id !== testId)
+        : [...prev, testId]
+    );
+  };
+
+  const toggleAllTestsForUnassign = () => {
+    if (selectedTestsForUnassign.length === assignedTests.length) {
+      setSelectedTestsForUnassign([]);
+    } else {
+      setSelectedTestsForUnassign(assignedTests.map(test => test.id));
+    }
+  };
+
   // Student Management Functions
   const handleManageStudents = async (institute) => {
     setSelectedInstituteForStudents(institute);
@@ -1851,6 +1936,84 @@ const AdminDashboard = () => {
       alert('❌ An error occurred while assigning tests');
     } finally {
       setIsAssigningTestInModal(false);
+    }
+  };
+
+  // Toggle Student Tests Dropdown
+  const toggleStudentTests = async (student) => {
+    const studentId = student.id;
+    
+    // If already expanded, collapse it
+    if (expandedStudentTests[studentId]) {
+      setExpandedStudentTests(prev => ({ ...prev, [studentId]: null }));
+      return;
+    }
+
+    // Otherwise, fetch and expand
+    setExpandedStudentTests(prev => ({ ...prev, [studentId]: { loading: true, tests: [] } }));
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await apiFetch(`api/institutes/students/${studentId}/assigned-tests`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setExpandedStudentTests(prev => ({ 
+          ...prev, 
+          [studentId]: { loading: false, tests: data.tests || [], student: student } 
+        }));
+      } else {
+        alert(data.message || 'Failed to fetch assigned tests');
+        setExpandedStudentTests(prev => ({ ...prev, [studentId]: null }));
+      }
+    } catch (error) {
+      console.error('Error fetching student tests:', error);
+      alert('Failed to fetch assigned tests');
+      setExpandedStudentTests(prev => ({ ...prev, [studentId]: null }));
+    }
+  };
+
+  // Unassign Test from Student (Dropdown version)
+  const handleUnassignTestFromStudent = async (studentId, testId, testTitle, studentName) => {
+    if (!confirm(`Are you sure you want to unassign "${testTitle}" from ${studentName}?`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      const response = await apiFetch(`api/institutes/students/${studentId}/unassign-test/${testId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        alert(data.message || 'Test unassigned successfully');
+        
+        // Refresh the expanded tests for this student
+        const studentData = expandedStudentTests[studentId]?.student;
+        if (studentData) {
+          toggleStudentTests(studentData);
+          // Re-expand after a brief delay
+          setTimeout(() => toggleStudentTests(studentData), 100);
+        }
+        
+        // Refresh the student list to update counts
+        handleManageStudents(selectedInstituteForStudents);
+      } else {
+        alert(data.message || 'Failed to unassign test');
+      }
+    } catch (error) {
+      console.error('Error unassigning test:', error);
+      alert('Failed to unassign test');
     }
   };
 
@@ -3879,7 +4042,10 @@ const AdminDashboard = () => {
                   <p className="text-shnoor-lavender text-sm mt-1">Assigned Tests</p>
                 </div>
                 <button
-                  onClick={() => setShowAssignedTestsModal(false)}
+                  onClick={() => {
+                    setShowAssignedTestsModal(false);
+                    setSelectedTestsForUnassign([]);
+                  }}
                   className="text-white hover:bg-white/20 rounded-full p-2 transition-colors"
                 >
                   <X size={24} />
@@ -3981,7 +4147,28 @@ const AdminDashboard = () => {
 
                 {/* Assigned Tests List */}
                 <div>
-                  <h4 className="text-sm font-bold text-shnoor-navy mb-3">Currently Assigned Tests</h4>
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="text-sm font-bold text-shnoor-navy">Currently Assigned Tests</h4>
+                    {selectedTestsForUnassign.length > 0 && (
+                      <button
+                        onClick={handleBulkUnassignTests}
+                        disabled={isUnassigningTests}
+                        className="px-4 py-2 bg-shnoor-indigo hover:bg-shnoor-navy text-white rounded-lg font-medium transition-all shadow-lg hover:-translate-y-0.5 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isUnassigningTests ? (
+                          <>
+                            <Loader2 className="animate-spin" size={16} />
+                            <span>Unassigning...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 size={16} />
+                            <span>Unassign {selectedTestsForUnassign.length} Selected</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
                   {isLoadingAssignedTests ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="animate-spin text-shnoor-indigo" size={32} />
@@ -3993,40 +4180,69 @@ const AdminDashboard = () => {
                       <p className="text-shnoor-indigoMedium">No tests assigned yet</p>
                     </div>
                   ) : (
-                    <div className="space-y-2 max-h-96 overflow-y-auto">
-                      {assignedTests.map((test) => (
-                        <div
-                          key={test.id}
-                          className="flex items-center justify-between p-4 bg-white border border-shnoor-light rounded-xl hover:shadow-md transition-all"
-                        >
-                          <div className="flex-1">
-                            <h5 className="font-bold text-shnoor-navy">{test.title}</h5>
-                            <p className="text-sm text-shnoor-indigoMedium">
-                              {test.question_count} questions • {test.duration_minutes} mins
-                              {test.is_institute_level && (
-                                <span className="ml-2 px-2 py-0.5 bg-shnoor-lavender text-shnoor-indigo rounded text-xs font-medium">
-                                  Institute Level
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => handleUnassignTestFromInstitute(test.id, test.title)}
-                            className="p-2 text-shnoor-indigo hover:bg-shnoor-lavender rounded-lg transition-colors"
-                            title="Unassign Test"
+                    <>
+                      {/* Select All Checkbox */}
+                      <div className="flex items-center space-x-3 mb-3 p-3 bg-white rounded-lg">
+                        <input
+                          type="checkbox"
+                          checked={selectedTestsForUnassign.length === assignedTests.length && assignedTests.length > 0}
+                          onChange={toggleAllTestsForUnassign}
+                          className="w-5 h-5 text-shnoor-indigo border-shnoor-mist rounded focus:ring-2 focus:ring-shnoor-lavender"
+                        />
+                        <span className="text-sm font-bold text-shnoor-indigo">
+                          {selectedTestsForUnassign.length > 0 ? `${selectedTestsForUnassign.length} selected` : 'Select All'}
+                        </span>
+                      </div>
+
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {assignedTests.map((test) => (
+                          <div
+                            key={test.id}
+                            className={`flex items-center justify-between p-4 border rounded-xl hover:shadow-md transition-all ${selectedTestsForUnassign.includes(test.id)
+                              ? 'bg-shnoor-lavender border-shnoor-indigo'
+                              : 'bg-white border-shnoor-light'
+                            }`}
                           >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                            <div className="flex items-center space-x-3 flex-1">
+                              <input
+                                type="checkbox"
+                                checked={selectedTestsForUnassign.includes(test.id)}
+                                onChange={() => toggleTestForUnassign(test.id)}
+                                className="w-5 h-5 text-shnoor-indigo border-shnoor-mist rounded focus:ring-2 focus:ring-shnoor-lavender"
+                              />
+                              <div className="flex-1">
+                                <h5 className="font-bold text-shnoor-navy">{test.title}</h5>
+                                <p className="text-sm text-shnoor-indigoMedium">
+                                  {test.question_count} questions • {test.duration_minutes} mins
+                                  {test.is_institute_level && (
+                                    <span className="ml-2 px-2 py-0.5 bg-shnoor-lavender text-shnoor-indigo rounded text-xs font-medium">
+                                      Institute Level
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleUnassignTestFromInstitute(test.id, test.title)}
+                              className="p-2 text-shnoor-indigo hover:bg-shnoor-lavender rounded-lg transition-colors"
+                              title="Unassign Test"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
 
               <div className="p-6 border-t border-shnoor-light flex justify-end">
                 <button
-                  onClick={() => setShowAssignedTestsModal(false)}
+                  onClick={() => {
+                    setShowAssignedTestsModal(false);
+                    setSelectedTestsForUnassign([]);
+                  }}
                   className="px-6 py-3 bg-shnoor-light hover:bg-shnoor-mist text-shnoor-navy rounded-xl font-medium transition-colors"
                 >
                   Close
@@ -4050,6 +4266,7 @@ const AdminDashboard = () => {
                     setShowStudentManagementModal(false);
                     setSelectedStudentsForDelete([]);
                     setSelectedTestsForStudentModal([]);
+                    setStudentSearchTerm('');
                   }}
                   className="text-white hover:bg-white/20 rounded-full p-2 transition-colors"
                 >
@@ -4152,6 +4369,18 @@ const AdminDashboard = () => {
                           </button>
                         )}
                       </div>
+                    </div>
+
+                    {/* Search Bar */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-shnoor-indigoMedium" size={18} />
+                      <input
+                        type="text"
+                        placeholder="Search students by name, email, or roll number..."
+                        value={studentSearchTerm}
+                        onChange={(e) => setStudentSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-shnoor-light rounded-xl focus:ring-4 focus:ring-shnoor-lavender focus:border-shnoor-indigo bg-white text-shnoor-navy transition-all"
+                      />
                     </div>
 
                     {/* Test Assignment Section */}
@@ -4263,7 +4492,27 @@ const AdminDashboard = () => {
                       <Users className="mx-auto mb-2 text-shnoor-mist" size={48} />
                       <p className="text-shnoor-indigoMedium">No students found</p>
                     </div>
-                  ) : (
+                  ) : (() => {
+                    const filteredStudents = instituteStudentsForManagement.filter(student => {
+                      if (!studentSearchTerm) return true;
+                      const searchLower = studentSearchTerm.toLowerCase();
+                      return (
+                        student.full_name?.toLowerCase().includes(searchLower) ||
+                        student.email?.toLowerCase().includes(searchLower) ||
+                        student.roll_number?.toLowerCase().includes(searchLower)
+                      );
+                    });
+
+                    if (filteredStudents.length === 0) {
+                      return (
+                        <div className="text-center py-8 bg-shnoor-lavender rounded-xl border border-shnoor-light">
+                          <Search className="mx-auto mb-2 text-shnoor-mist" size={48} />
+                          <p className="text-shnoor-indigoMedium">No students match your search</p>
+                        </div>
+                      );
+                    }
+
+                    return (
                     <>
                       {/* Select All Checkbox */}
                       {/* Selection Controls */}
@@ -4271,8 +4520,8 @@ const AdminDashboard = () => {
                         <div className="flex items-center space-x-3">
                           <input
                             type="checkbox"
-                            checked={selectedStudentsForDelete.length === instituteStudentsForManagement.length && instituteStudentsForManagement.length > 0}
-                            onChange={() => toggleAllStudentsForDelete(instituteStudentsForManagement)}
+                            checked={selectedStudentsForDelete.length === filteredStudents.length && filteredStudents.length > 0}
+                            onChange={() => toggleAllStudentsForDelete(filteredStudents)}
                             className="w-5 h-5 text-shnoor-indigo border-shnoor-mist rounded focus:ring-2 focus:ring-shnoor-lavender"
                           />
                           <span className="text-sm font-bold text-shnoor-indigo">
@@ -4285,7 +4534,7 @@ const AdminDashboard = () => {
                           <input 
                             type="number" 
                             min="1"
-                            max={instituteStudentsForManagement.length}
+                            max={filteredStudents.length}
                             className="w-16 px-2 py-1 text-sm border border-shnoor-light rounded focus:ring-2 focus:ring-shnoor-lavender"
                             placeholder="1"
                             value={selectionRange.start}
@@ -4295,9 +4544,9 @@ const AdminDashboard = () => {
                           <input 
                             type="number" 
                             min="1"
-                            max={instituteStudentsForManagement.length}
+                            max={filteredStudents.length}
                             className="w-16 px-2 py-1 text-sm border border-shnoor-light rounded focus:ring-2 focus:ring-shnoor-lavender"
-                            placeholder={instituteStudentsForManagement.length.toString()}
+                            placeholder={filteredStudents.length.toString()}
                             value={selectionRange.end}
                             onChange={(e) => setSelectionRange({...selectionRange, end: e.target.value})}
                           />
@@ -4311,44 +4560,122 @@ const AdminDashboard = () => {
                       </div>
 
                       <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {instituteStudentsForManagement.map((student, index) => (
-                          <div
-                            key={student.id}
-                            className={`flex items-center justify-between p-4 border rounded-xl hover:shadow-md transition-all ${selectedStudentsForDelete.includes(student.id)
-                              ? 'bg-shnoor-lavender border-shnoor-indigo'
-                              : 'bg-white border-shnoor-light'
-                              }`}
-                          >
-                            <div className="flex items-center space-x-3 flex-1">
-                              <span className="text-sm font-bold text-shnoor-indigo w-6">{index + 1}.</span>
-                              <input
-                                type="checkbox"
-                                checked={selectedStudentsForDelete.includes(student.id)}
-                                onChange={() => toggleStudentForDelete(student.id)}
-                                className="w-5 h-5 text-shnoor-indigo border-shnoor-mist rounded focus:ring-2 focus:ring-shnoor-lavender"
-                              />
-                              <div className="flex-1">
-                                <h5 className="font-bold text-shnoor-navy">{student.full_name}</h5>
-                                <p className="text-sm text-shnoor-indigoMedium">
-                                  {student.email} • {student.roll_number || 'No roll number'}
-                                  <span className="ml-2 text-xs">
-                                    ({student.assigned_tests_count} test{student.assigned_tests_count !== 1 ? 's' : ''} assigned)
-                                  </span>
-                                </p>
+                        {filteredStudents.map((student, index) => (
+                          <div key={student.id}>
+                            <div
+                              className={`flex items-center justify-between p-4 border rounded-xl hover:shadow-md transition-all ${selectedStudentsForDelete.includes(student.id)
+                                ? 'bg-shnoor-lavender border-shnoor-indigo'
+                                : 'bg-white border-shnoor-light'
+                                }`}
+                            >
+                              <div className="flex items-center space-x-3 flex-1">
+                                <span className="text-sm font-bold text-shnoor-indigo w-6">{index + 1}.</span>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedStudentsForDelete.includes(student.id)}
+                                  onChange={() => toggleStudentForDelete(student.id)}
+                                  className="w-5 h-5 text-shnoor-indigo border-shnoor-mist rounded focus:ring-2 focus:ring-shnoor-lavender"
+                                />
+                                <div className="flex-1">
+                                  <h5 className="font-bold text-shnoor-navy">{student.full_name}</h5>
+                                  <p className="text-sm text-shnoor-indigoMedium">
+                                    {student.email} • {student.roll_number || 'No roll number'}
+                                    {student.assigned_tests_count > 0 && (
+                                      <button
+                                        onClick={() => toggleStudentTests(student)}
+                                        className="ml-2 text-xs text-shnoor-indigo hover:text-shnoor-navy font-medium underline"
+                                      >
+                                        ({student.assigned_tests_count} test{student.assigned_tests_count !== 1 ? 's' : ''} assigned)
+                                      </button>
+                                    )}
+                                    {student.assigned_tests_count === 0 && (
+                                      <span className="ml-2 text-xs text-shnoor-soft">
+                                        (0 tests assigned)
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                {student.assigned_tests_count > 0 && (
+                                  <button
+                                    onClick={() => toggleStudentTests(student)}
+                                    className="p-2 text-shnoor-indigo hover:bg-shnoor-lavender rounded-lg transition-colors"
+                                    title="View Assigned Tests"
+                                  >
+                                    <ChevronDown 
+                                      size={18} 
+                                      className={`transition-transform ${expandedStudentTests[student.id] ? 'rotate-180' : ''}`}
+                                    />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteStudent(student.id, student.full_name)}
+                                  className="p-2 text-shnoor-indigo hover:bg-shnoor-lavender rounded-lg transition-colors"
+                                  title="Delete Student"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
                               </div>
                             </div>
-                            <button
-                              onClick={() => handleDeleteStudent(student.id, student.full_name)}
-                              className="p-2 text-shnoor-indigo hover:bg-shnoor-lavender rounded-lg transition-colors"
-                              title="Delete Student"
-                            >
-                              <Trash2 size={18} />
-                            </button>
+
+                            {/* Expanded Tests Dropdown */}
+                            {expandedStudentTests[student.id] && (
+                              <div className="ml-12 mr-4 mt-2 mb-2 p-4 bg-shnoor-lavender rounded-lg border border-shnoor-light">
+                                {expandedStudentTests[student.id].loading ? (
+                                  <div className="flex items-center justify-center py-4">
+                                    <Loader2 className="animate-spin text-shnoor-indigo" size={20} />
+                                    <span className="ml-2 text-sm text-shnoor-indigoMedium">Loading tests...</span>
+                                  </div>
+                                ) : expandedStudentTests[student.id].tests.length === 0 ? (
+                                  <div className="text-center py-4">
+                                    <FileSpreadsheet className="mx-auto mb-2 text-shnoor-mist" size={32} />
+                                    <p className="text-sm text-shnoor-indigoMedium">No tests assigned</p>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    <h6 className="text-xs font-bold text-shnoor-navy mb-2">Assigned Tests:</h6>
+                                    {expandedStudentTests[student.id].tests.map((test) => (
+                                      <div
+                                        key={test.id}
+                                        className="flex items-center justify-between p-3 bg-white rounded-lg border border-shnoor-light hover:shadow-sm transition-all"
+                                      >
+                                        <div className="flex-1">
+                                          <h6 className="text-sm font-semibold text-shnoor-navy">{test.title}</h6>
+                                          <p className="text-xs text-shnoor-indigoMedium">
+                                            {test.question_count} questions • {test.duration_minutes} mins
+                                            {test.status && (
+                                              <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
+                                                test.status === 'completed' 
+                                                  ? 'bg-green-100 text-green-700' 
+                                                  : test.status === 'in_progress'
+                                                  ? 'bg-yellow-100 text-yellow-700'
+                                                  : 'bg-blue-100 text-blue-700'
+                                              }`}>
+                                                {test.status === 'completed' ? 'Completed' : test.status === 'in_progress' ? 'In Progress' : 'Not Started'}
+                                              </span>
+                                            )}
+                                          </p>
+                                        </div>
+                                        <button
+                                          onClick={() => handleUnassignTestFromStudent(student.id, test.id, test.title, student.full_name)}
+                                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                          title="Unassign Test"
+                                        >
+                                          <Trash2 size={16} />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
                     </>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -4358,6 +4685,8 @@ const AdminDashboard = () => {
                     setShowStudentManagementModal(false);
                     setSelectedStudentsForDelete([]);
                     setSelectedTestsForStudentModal([]);
+                    setStudentSearchTerm('');
+                    setExpandedStudentTests({});
                   }}
                   className="px-6 py-3 bg-shnoor-light hover:bg-shnoor-mist text-shnoor-navy rounded-xl font-medium transition-colors"
                 >
