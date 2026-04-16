@@ -1308,7 +1308,7 @@ const CreateTestSection = ({ onComplete, editingTest }) => {
 
                             <button
                                 onClick={handleAddQuestion}
-                                className="w-full py-3 bg-shnoor-navyLight hover:bg-shnoor-navyLight text-white font-semibold rounded-lg transition-colors flex items-center justify-center space-x-2"
+                                className="w-full py-3 bg-theme-accent hover:bg-theme-accent2 text-white font-semibold rounded-lg transition-colors flex items-center justify-center space-x-2"
                             >
                                 <Plus size={20} />
                                 <span>Add Question to Test</span>

@@ -6,9 +6,9 @@ import StudentInterviews from '../components/StudentInterviews';
 import JobBoard from './JobBoard';
 import MyApplications from './MyApplications';
 import StudentSupportChatbot from '../components/chatbot/StudentSupportChatbot';
-import { apiFetch } from '../config/api';
-import shnoorLogo from '../assets/shnoor-logo1.png';
 import ThemeSelector from '../components/ThemeSelector';
+import { apiFetch } from '../config/api';
+import shnoorLogo from '../assets/shnoor-logo.png';
 
 const STUDENT_DASHBOARD_TABS = ['tests', 'interviews', 'job-board', 'my-applications'];
 
@@ -147,6 +147,25 @@ const Dashboard = () => {
 
     fetchData();
   }, [navigate]);
+
+  // Poll every 30 s so newly-assigned tests appear without a manual refresh
+  useEffect(() => {
+    const refreshTests = async () => {
+      const token = localStorage.getItem('studentAuthToken');
+      if (!token) return;
+      try {
+        const res = await apiFetch('api/student/tests', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) setAvailableTests(prev =>
+            JSON.stringify(data.tests) === JSON.stringify(prev) ? prev : data.tests
+          );
+        }
+      } catch { /* silent */ }
+    };
+    const id = setInterval(refreshTests, 30000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('studentDashboardTab', activeTab);
@@ -378,15 +397,16 @@ const Dashboard = () => {
               </div>
               <div>
                 <h1 className="text-white font-bold text-base sm:text-lg leading-tight">Assessment Portal</h1>
-                <p className="site-header-subtitle text-shnoor-light opacity-80 text-[10px] sm:text-xs">Student Dashboard</p>
+                <p className="text-white/75 text-[10px] sm:text-xs">Student Dashboard</p>
               </div>
             </div>
 
-            <div className="flex items-center space-x-4 sm:space-x-6">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-medium text-white">Welcome, {studentName}</p>
-                <p className="text-xs text-shnoor-soft">{capitalizeInstitute(institute)} • ID: {studentId}</p>
+                <p className="text-xs text-white/60">{capitalizeInstitute(institute)} • ID: {studentId}</p>
               </div>
+              <ThemeSelector variant="dark" />
               <button
                 onClick={handleLogout}
                 className="admin-logout-btn flex items-center justify-center space-x-2 px-3 sm:px-5 py-2 !h-9 sm:!h-10 text-white bg-transparent border border-white/20 hover:bg-white/10 rounded-lg transition-colors text-xs sm:text-sm font-medium"

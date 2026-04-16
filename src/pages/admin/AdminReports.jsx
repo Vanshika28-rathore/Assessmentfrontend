@@ -128,16 +128,31 @@ const AdminReports = () => {
                                     control: (base) => ({
                                         ...base,
                                         padding: '4px',
-                                        borderRadius: '0.75rem',
-                                        borderColor: '#B7B7D9', // shnoor-light
+                                        borderRadius: '1rem',
+                                        backgroundColor: 'rgb(var(--theme-card))',
+                                        borderColor: 'rgb(var(--theme-shell-stroke))',
                                         boxShadow: 'none',
                                         '&:hover': {
-                                            borderColor: '#44448E' // shnoor-indigo
+                                            borderColor: 'rgb(var(--theme-accent))'
                                         }
+                                    }),
+                                    singleValue: (base) => ({
+                                        ...base,
+                                        color: 'rgb(var(--theme-text))'
+                                    }),
+                                    input: (base) => ({
+                                        ...base,
+                                        color: 'rgb(var(--theme-text))'
+                                    }),
+                                    placeholder: (base) => ({
+                                        ...base,
+                                        color: 'rgb(var(--theme-text-muted))'
                                     }),
                                     menu: (base) => ({
                                         ...base,
                                         maxHeight: '300px',
+                                        backgroundColor: 'rgb(var(--theme-card))',
+                                        border: '1px solid rgb(var(--theme-border))',
                                         zIndex: 9999,
                                     }),
                                     menuList: (base) => ({
@@ -148,15 +163,15 @@ const AdminReports = () => {
                                             width: '8px',
                                         },
                                         '::-webkit-scrollbar-track': {
-                                            background: '#E0E0EF', // shnoor-lavender
+                                            background: 'rgb(var(--theme-panel))',
                                             borderRadius: '10px',
                                         },
                                         '::-webkit-scrollbar-thumb': {
-                                            background: '#8F8FC4', // shnoor-soft
+                                            background: 'rgb(var(--theme-border))',
                                             borderRadius: '10px',
                                         },
                                         '::-webkit-scrollbar-thumb:hover': {
-                                            background: '#6868AC', // shnoor-indigoMedium
+                                            background: 'rgb(var(--theme-accent))',
                                         },
                                     }),
                                     menuPortal: (base) => ({
@@ -166,30 +181,30 @@ const AdminReports = () => {
                                     option: (base, state) => ({
                                         ...base,
                                         backgroundColor: state.isSelected
-                                            ? '#44448E' // shnoor-indigo
+                                            ? 'rgb(var(--theme-accent))'
                                             : state.isFocused
-                                                ? '#E0E0EF' // shnoor-lavender
-                                                : 'white',
-                                        color: state.isSelected ? 'white' : '#0E0E27', // shnoor-navy
+                                                ? 'rgb(var(--theme-panel))'
+                                                : 'rgb(var(--theme-card))',
+                                        color: state.isSelected ? 'white' : 'rgb(var(--theme-text))',
                                         cursor: 'pointer',
                                         padding: '10px 12px',
                                     }),
                                     multiValue: (base) => ({
                                         ...base,
-                                        backgroundColor: '#E0E0EF', // shnoor-lavender
-                                        borderRadius: '0.375rem',
+                                        backgroundColor: 'rgb(var(--theme-panel))',
+                                        borderRadius: '0.75rem',
                                     }),
                                     multiValueLabel: (base) => ({
                                         ...base,
-                                        color: '#0E0E27', // shnoor-navy
+                                        color: 'rgb(var(--theme-text))',
                                         fontWeight: 500,
                                     }),
                                     multiValueRemove: (base) => ({
                                         ...base,
-                                        color: '#0E0E27', // shnoor-navy
+                                        color: 'rgb(var(--theme-text))',
                                         ':hover': {
-                                            backgroundColor: '#B7B7D9', // shnoor-light
-                                            color: '#0E0E27', // shnoor-navy
+                                            backgroundColor: 'rgb(var(--theme-border))',
+                                            color: 'rgb(var(--theme-text))',
                                         },
                                     }),
                                 }}

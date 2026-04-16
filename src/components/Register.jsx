@@ -389,6 +389,8 @@ const Register = () => {
         setApiError('Password is too weak. Please use a stronger password.');
       } else if (error.code === 'auth/invalid-email') {
         setApiError('Invalid email address format.');
+      } else if (error.message && (error.message.toLowerCase().includes('firebase') || error.message.toLowerCase().includes('not configured'))) {
+        setApiError('Registration is currently unavailable. Please contact your administrator.');
       } else {
         // Backend or other errors
         setApiError(error.message || 'Unable to complete registration. Please try again.');
@@ -686,23 +688,25 @@ const Register = () => {
         <ThemeSelector variant="light" />
       </div>
     {/* ── LEFT PANEL ────────────────────────────────────── */}
-      <div className="hidden lg:flex lg:w-[38%] flex-col justify-between bg-shnoor-navy px-12 py-12 relative overflow-hidden">
+      <div className="auth-left-panel hidden lg:flex lg:w-[38%] flex-col justify-between bg-shnoor-navy px-12 py-12 relative overflow-hidden">
         <div className="absolute top-[-80px] right-[-60px] w-80 h-80 rounded-full bg-shnoor-indigo opacity-20 blur-3xl pointer-events-none" />
         <div className="absolute bottom-[-60px] left-[-40px] w-60 h-60 rounded-full bg-[#6868AC] opacity-15 blur-3xl pointer-events-none" />
 
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-12">
-            <img src={shnoorLogo} alt="Shnoor" className="h-11 w-11 object-contain" width="44" height="44" loading="eager" fetchPriority="high" />
+            <div className="site-header-logo flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-white">
+              <img src={shnoorLogo} alt="Shnoor" className="h-11 w-11 object-contain" width="44" height="44" loading="eager" fetchPriority="high" />
+            </div>
             <div>
               <p className="font-extrabold text-white text-lg leading-tight">SHNOOR Assessments</p>
-              <p className="text-[11px] text-[#8F8FC4] uppercase tracking-widest font-semibold">Secure Examination Portal</p>
+              <p className="auth-brand-subtitle text-[11px] uppercase tracking-widest font-semibold">Secure Examination Portal</p>
             </div>
           </div>
 
           <h2 className="text-2xl font-extrabold text-white leading-tight mb-2">
-            Join the <span className="text-[#8F8FC4]">SHNOOR</span><br />Recruitment Drive
+            Join the <span className="auth-hero-accent">SHNOOR</span><br />Recruitment Drive
           </h2>
-          <p className="text-[#8F8FC4] text-sm leading-relaxed mb-10">
+          <p className="auth-left-muted text-sm leading-relaxed mb-10">
             Complete 4 quick steps to create your account and access your assessments.
           </p>
 
@@ -713,8 +717,7 @@ const Register = () => {
               const isActive = i === step;
               return (
                 <div key={i} className={`flex items-start gap-4 transition-all duration-300 ${isActive ? 'opacity-100' : isDone ? 'opacity-75' : 'opacity-30'}`}>
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300
-                    ${isDone ? 'bg-shnoor-success' : isActive ? 'bg-shnoor-indigo shadow-[0_0_16px_rgba(68,68,142,0.6)]' : 'bg-white/10'}`}>
+                  <div className={`auth-step-badge w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-300 ${isDone ? 'is-complete' : isActive ? 'is-active' : 'is-pending'}`}>
                     {isDone ? (
                       <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -726,8 +729,8 @@ const Register = () => {
                     )}
                   </div>
                   <div>
-                    <p className={`text-sm font-bold ${isActive ? 'text-white' : isDone ? 'text-white/70' : 'text-white/40'}`}>{s.title}</p>
-                    <p className={`text-xs leading-relaxed ${isActive ? 'text-[#8F8FC4]' : 'text-[#8F8FC4]/50'}`}>{s.desc}</p>
+                    <p className={`auth-step-title text-sm font-bold ${isActive ? 'is-active' : isDone ? 'is-complete' : 'is-pending'}`}>{s.title}</p>
+                    <p className={`auth-step-subtitle text-xs leading-relaxed ${isActive || isDone ? '' : 'is-pending'}`}>{s.desc}</p>
                   </div>
                 </div>
               );
@@ -737,15 +740,15 @@ const Register = () => {
 
         <div className="relative z-10">
           <div className="flex gap-1 mb-3">
-            {['#E0E0EF', '#B7B7D9', '#8F8FC4', '#6868AC', '#44448E', '#272757', '#0E0E27'].map(c => (
-              <div key={c} className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: c }} />
+            {[1, 2, 3, 4, 5, 6, 7].map((index) => (
+              <div key={index} className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: `rgb(var(--theme-progress-${index}))` }} />
             ))}
           </div>
-          <p className="text-xs text-[#6868AC]">SHNOOR Recruitment & Assessment Portal</p>
+          <p className="auth-bottom-copy text-xs">SHNOOR Recruitment & Assessment Portal</p>
         </div>
       </div>
       {/* ── RIGHT PANEL ───────────────────────────────────── */}
-      <div className="flex-1 bg-white flex items-center justify-center px-6 py-10 overflow-auto">
+      <div className="auth-right-panel flex-1 bg-white flex items-center justify-center px-6 py-10 overflow-auto">
         <div className="w-full max-w-[500px]">
           {/* Mobile brand */}
           <div className="flex items-center gap-3 mb-6 lg:hidden">
@@ -762,19 +765,17 @@ const Register = () => {
               <span className="text-xs font-bold text-shnoor-indigo uppercase tracking-widest">Step {step + 1} of {TOTAL_STEPS}</span>
               <span className="text-xs text-shnoor-soft font-medium">{STEP_META[step].title}</span>
             </div>
-            <div className="h-1.5 bg-shnoor-lavender rounded-full overflow-hidden">
+            <div className="auth-progress-track h-1.5 bg-shnoor-lavender rounded-full overflow-hidden">
               <div
-                className="h-full bg-shnoor-indigo rounded-full transition-all duration-500 ease-out"
+                className="auth-progress-fill h-full bg-shnoor-indigo rounded-full transition-all duration-500 ease-out"
                 style={{ width: `${((step + 1) / TOTAL_STEPS) * 100}%` }}
               />
             </div>
             <div className="flex justify-between mt-2">
               {STEP_META.map((s, i) => (
                 <div key={i} className="flex items-center gap-1">
-                  <div className={`w-2 h-2 rounded-full transition-all duration-300
-                    ${i < step ? 'bg-shnoor-success' : i === step ? 'bg-shnoor-indigo scale-125' : 'bg-shnoor-mist'}`} />
-                  <span className={`text-[10px] font-semibold hidden sm:block transition-colors duration-200
-                    ${i === step ? 'text-shnoor-navy' : i < step ? 'text-shnoor-success' : 'text-shnoor-soft'}`}>
+                  <div className={`auth-step-dot w-2 h-2 rounded-full transition-all duration-300 ${i < step ? 'is-complete' : i === step ? 'is-active scale-125' : 'is-pending'}`} />
+                  <span className={`auth-step-label text-[10px] font-semibold hidden sm:block transition-colors duration-200 ${i === step ? 'text-shnoor-navy' : i < step ? 'text-shnoor-success' : 'text-shnoor-soft'}`}>
                     {s.title}
                   </span>
                 </div>
@@ -849,7 +850,7 @@ const Register = () => {
                 Sign in
               </Link>
             </p>
-            <p className="text-center text-xs text-[#8F8FC4] mt-3 flex items-center justify-center gap-1.5">
+            <p className="auth-left-muted text-center text-xs mt-3 flex items-center justify-center gap-1.5">
               <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />
               </svg>

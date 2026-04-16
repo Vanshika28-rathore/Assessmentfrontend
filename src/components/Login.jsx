@@ -183,7 +183,7 @@ const Login = () => {
         <ThemeSelector variant="light" />
       </div>
       {/* ── LEFT PANEL (dark) ─────────────────────────────── */}
-      <div className="hidden lg:flex lg:w-[45%] flex-col justify-between bg-shnoor-navy px-14 py-12 relative overflow-hidden">
+      <div className="auth-left-panel hidden lg:flex lg:w-[45%] flex-col justify-between bg-shnoor-navy px-14 py-12 relative overflow-hidden">
         {/* Decorative gradient orbs */}
         <div className="absolute top-[-60px] left-[-60px] w-72 h-72 rounded-full bg-shnoor-indigo opacity-20 blur-3xl pointer-events-none" />
         <div className="absolute bottom-[-40px] right-[-40px] w-56 h-56 rounded-full bg-[#6868AC] opacity-15 blur-3xl pointer-events-none" />
@@ -191,18 +191,20 @@ const Login = () => {
         {/* Brand */}
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-12">
-            <img src={shnoorLogo} alt="Shnoor" className="h-11 w-11 object-contain" width="44" height="44" loading="eager" fetchPriority="high" />
+            <div className="site-header-logo flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-white">
+              <img src={shnoorLogo} alt="Shnoor" className="h-11 w-11 object-contain" width="44" height="44" loading="eager" fetchPriority="high" />
+            </div>
             <div>
               <p className="font-extrabold text-white text-lg leading-tight">SHNOOR Assessments</p>
-              <p className="text-[11px] text-[#8F8FC4] uppercase tracking-widest font-semibold">Secure Examination Portal</p>
+              <p className="auth-brand-subtitle text-[11px] uppercase tracking-widest font-semibold">Secure Examination Portal</p>
             </div>
           </div>
 
           <h2 className="text-3xl font-extrabold text-white leading-tight mb-3">
             Welcome back to<br />
-            <span className="text-[#8F8FC4]">your portal</span>
+            <span className="auth-hero-accent">your portal</span>
           </h2>
-          <p className="text-[#8F8FC4] text-sm leading-relaxed mb-10">
+          <p className="auth-left-muted text-sm leading-relaxed mb-10">
             Sign in to access your assigned assessments, track your progress, and complete recruitment tests.
           </p>
 
@@ -210,27 +212,27 @@ const Login = () => {
           <div className="flex flex-col gap-5">
             {LEFT_FEATURES.map(f => (
               <div key={f.label} className="flex items-center gap-4">
-                <div className="w-9 h-9 rounded-xl bg-shnoor-indigo/40 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-5 h-5 text-[#B7B7D9]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <div className="auth-feature-icon-shell w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <svg className="auth-feature-icon w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d={f.icon} />
                   </svg>
                 </div>
-                <span className="text-sm text-[#B7B7D9] font-medium">{f.label}</span>
+                <span className="auth-feature-text text-sm font-medium">{f.label}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* Bottom quote */}
-        <div className="relative z-10 border-t border-white/10 pt-6">
-          <p className="text-xs text-[#B7B7D9] italic leading-relaxed">
+        <div className="auth-bottom-divider relative z-10 border-t pt-6">
+          <p className="auth-bottom-copy text-xs italic leading-relaxed">
             "These measures ensure a fair and secure assessment process for all candidates."
           </p>
         </div>
       </div>
 
       {/* ── RIGHT PANEL (white form) ───────────────────────── */}
-      <div className="flex-1 flex items-center justify-center bg-white px-4 sm:px-6 py-6 sm:py-10 lg:py-12 min-h-[100dvh] lg:min-h-screen overflow-auto">
+      <div className="auth-right-panel flex-1 flex items-center justify-center bg-white px-4 sm:px-6 py-6 sm:py-10 lg:py-12 min-h-[100dvh] lg:min-h-screen overflow-auto">
         <div className="w-full max-w-[440px]">
           {/* Mobile brand header */}
           <div className="flex items-center gap-3 mb-8 lg:hidden">
@@ -249,7 +251,7 @@ const Login = () => {
 
           {/* Alerts */}
           {successMessage && (
-            <div className="mb-5 flex items-start gap-3 bg-shnoor-successLight border border-shnoor-successLight text-shnoor-success rounded-xl px-4 py-3 text-sm">
+            <div className="mb-5 flex items-start gap-3 bg-shnoor-successLight border border-[rgb(var(--theme-border))] text-[rgb(var(--theme-text))] rounded-xl px-4 py-3 text-sm">
               <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zm3.97 4.97a.75.75 0 0 0-1.08-.022L6.477 9.417 4.384 7.323a.75.75 0 0 0-1.06 1.06l2.75 2.75a.75.75 0 0 0 1.137-.089l4-5.5a.75.75 0 0 0-.24-1.573z" />
               </svg>

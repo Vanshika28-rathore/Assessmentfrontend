@@ -6,6 +6,7 @@ import { useTabSwitch } from '../hooks/useTabSwitch';
 import { useProctoringWithAI } from '../hooks/useProctoringWithAI';
 import FullscreenWarning from '../components/FullscreenWarning';
 import AIViolationAlert from '../components/AIViolationAlert';
+import ThemeSelector from '../components/ThemeSelector';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -25,6 +26,7 @@ import {
 } from 'lucide-react';
 import { apiFetch } from '../config/api';
 import codeExecutionAPI from '../services/codeExecutionAPI';
+import { getSavedTheme } from '../utils/theme';
 
 const TestScreen = () => {
   const navigate = useNavigate();
@@ -87,6 +89,7 @@ int main() {
   const [testDetails, setTestDetails] = useState(null);
   const [currentAIViolation, setCurrentAIViolation] = useState(null);
   const [aiViolationCount, setAiViolationCount] = useState(0);
+  const [editorTheme, setEditorTheme] = useState(getSavedTheme());
 
   // Calculate total questions (MCQ + Coding)
   const totalQuestions = questions.length + codingQuestions.length;
@@ -188,6 +191,16 @@ int main() {
     markAllAsRead,
     unreadCount
   } = useProctoringWithAI(handleCameraLost, handleAIViolation, null, handleForceStop);
+
+  useEffect(() => {
+    const syncTheme = () => setEditorTheme(getSavedTheme());
+    window.addEventListener('themechange', syncTheme);
+    window.addEventListener('storage', syncTheme);
+    return () => {
+      window.removeEventListener('themechange', syncTheme);
+      window.removeEventListener('storage', syncTheme);
+    };
+  }, []);
 
   // Helper function to get the stored JWT session token
   const getValidToken = useCallback(async () => {
@@ -818,7 +831,8 @@ int main() {
             </div>
 
             {/* Right: Finish Test Button */}
-            <div className="flex justify-end lg:flex-none">
+            <div className="flex items-center justify-end gap-2 lg:flex-none">
+              <ThemeSelector variant={editorTheme === 'default' ? 'light' : 'dark'} />
               <button
                 onClick={() => {
                   if (window.confirm('Are you sure you want to finish and submit the test? This action cannot be undone.')) {
@@ -1104,7 +1118,7 @@ int main() {
                       {tab === 'questions' ? (
                         <span>Palette</span>
                       ) : tab === 'description' ? (
-                        <span className="hidden sm:inline">Description</span>
+                        <><span className="hidden sm:inline">Description</span><span className="sm:hidden">Desc</span></>
                       ) : (
                         <div className="flex flex-col items-center gap-1">
                           <div className="relative">
@@ -1634,7 +1648,7 @@ int main() {
                       };
                     });
                   }}
-                  theme="vs-dark"
+                  theme={editorTheme === 'default' ? 'light' : 'vs-dark'}
                   options={{
                     minimap: { enabled: false },
                     fontSize: 14,

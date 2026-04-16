@@ -1,9 +1,11 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import './App.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import { AdminAuthProvider } from './contexts/AdminAuthContext';
 import AdminProtectedRoute from './components/AdminProtectedRoute';
+import GlobalThemeSelector from './components/GlobalThemeSelector';
+import { applyTheme, getSavedTheme } from './utils/theme';
 
 // Eagerly load Loading Spinner to show while chunks are fetched
 const LoadingFallback = () => (
@@ -51,49 +53,62 @@ const TestRoute = ({ children }) => {
   return children;
 };
 
+const AppRoutes = () => {
+  useEffect(() => {
+    applyTheme(getSavedTheme());
+  }, []);
+
+  return (
+    <>
+      <GlobalThemeSelector />
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/admin/login" element={<Navigate to="/login" replace />} />
+        <Route path="/server-down" element={<ServerDown />} />
+        <Route path="/maintenance" element={<Maintenance />} />
+
+        {/* Student Routes */}
+        <Route path="/dashboard" element={<StudentRoute><Dashboard /></StudentRoute>} />
+        <Route path="/instructions" element={<TestRoute><Instructions /></TestRoute>} />
+        <Route path="/test" element={<TestRoute><TestScreen /></TestRoute>} />
+        <Route path="/result" element={<StudentRoute><Result /></StudentRoute>} />
+        <Route path="/feedback" element={<StudentRoute><Feedback /></StudentRoute>} />
+        <Route path="/job-board" element={<StudentRoute><JobBoard /></StudentRoute>} />
+        <Route path="/student/my-applications" element={<StudentRoute><MyApplications /></StudentRoute>} />
+
+        {/* Admin Routes - Now with Enhanced Protection */}
+        <Route path="/admin/dashboard" element={<AdminProtectedRoute><AdminDashboard /></AdminProtectedRoute>} />
+        <Route path="/admin/reports" element={<AdminProtectedRoute><AdminReports /></AdminProtectedRoute>} />
+        <Route path="/admin/live-proctoring" element={<AdminProtectedRoute><LiveProctoring /></AdminProtectedRoute>} />
+        <Route path="/admin/student-messages" element={<AdminProtectedRoute><StudentMessages /></AdminProtectedRoute>} />
+        <Route path="/admin/settings" element={<AdminProtectedRoute><AdminSettings /></AdminProtectedRoute>} />
+        <Route path="/admin/job-applicants/:jobId" element={<AdminProtectedRoute><AdminJobApplicants /></AdminProtectedRoute>} />
+        <Route path="/admin/interviews" element={<AdminProtectedRoute><InterviewsList /></AdminProtectedRoute>} />
+        <Route path="/admin/interview-room/:interviewId" element={<AdminProtectedRoute><InterviewRoom /></AdminProtectedRoute>} />
+
+        {/* Student Interview Route */}
+        <Route path="/interview-room/:interviewId" element={<StudentRoute><InterviewRoom /></StudentRoute>} />
+
+        {/* Default */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
+  );
+};
+
 function App() {
   return (
     <ErrorBoundary>
       <AdminAuthProvider>
         <Router>
           <Suspense fallback={<LoadingFallback />}>
-            <Routes>
-              {/* Public Routes */}
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-              <Route path="/terms-and-conditions" element={<TermsAndConditions />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/admin/login" element={<Navigate to="/login" replace />} />
-              <Route path="/server-down" element={<ServerDown />} />
-              <Route path="/maintenance" element={<Maintenance />} />
-
-              {/* Student Routes */}
-              <Route path="/dashboard" element={<StudentRoute><Dashboard /></StudentRoute>} />
-              <Route path="/instructions" element={<TestRoute><Instructions /></TestRoute>} />
-              <Route path="/test" element={<TestRoute><TestScreen /></TestRoute>} />
-              <Route path="/result" element={<StudentRoute><Result /></StudentRoute>} />
-              <Route path="/feedback" element={<StudentRoute><Feedback /></StudentRoute>} />
-              <Route path="/job-board" element={<StudentRoute><JobBoard /></StudentRoute>} />
-              <Route path="/student/my-applications" element={<StudentRoute><MyApplications /></StudentRoute>} />
-
-              {/* Admin Routes - Now with Enhanced Protection */}
-              <Route path="/admin/dashboard" element={<AdminProtectedRoute><AdminDashboard /></AdminProtectedRoute>} />
-              <Route path="/admin/reports" element={<AdminProtectedRoute><AdminReports /></AdminProtectedRoute>} />
-              <Route path="/admin/live-proctoring" element={<AdminProtectedRoute><LiveProctoring /></AdminProtectedRoute>} />
-              <Route path="/admin/student-messages" element={<AdminProtectedRoute><StudentMessages /></AdminProtectedRoute>} />
-              <Route path="/admin/settings" element={<AdminProtectedRoute><AdminSettings /></AdminProtectedRoute>} />
-              <Route path="/admin/job-applicants/:jobId" element={<AdminProtectedRoute><AdminJobApplicants /></AdminProtectedRoute>} />
-              <Route path="/admin/interviews" element={<AdminProtectedRoute><InterviewsList /></AdminProtectedRoute>} />
-              <Route path="/admin/interview-room/:interviewId" element={<AdminProtectedRoute><InterviewRoom /></AdminProtectedRoute>} />
-
-              {/* Student Interview Route */}
-              <Route path="/interview-room/:interviewId" element={<StudentRoute><InterviewRoom /></StudentRoute>} />
-
-              {/* Default */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <AppRoutes />
           </Suspense>
         </Router>
       </AdminAuthProvider>

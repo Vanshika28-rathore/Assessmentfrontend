@@ -2,7 +2,6 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import Button from '../components/Button';
 import Card from '../components/Card';
-import shnoorlogo1 from '../assets/shnoor-logo1.png';
 import shnoorLogo from '../assets/shnoor-logo.png';
 import ThemeSelector from '../components/ThemeSelector';
 
@@ -36,21 +35,23 @@ const FEATURES = [
 ];
 
 const LandingPage = () => (
-  <div className="font-['Plus_Jakarta_Sans',sans-serif] text-shnoor-navy antialiased">
+  <div className="landing-root font-['Plus_Jakarta_Sans',sans-serif] text-shnoor-navy antialiased">
 
     {/* ── 1. NAVBAR ──────────────────────────────────────────────────────── */}
-    <nav className="bg-white border-b border-shnoor-mist sticky top-0 z-50 shadow-sm">
+    <nav className="landing-nav bg-white border-b border-shnoor-mist sticky top-0 z-50 shadow-sm">
       <div className="max-w-[1280px] mx-auto px-4 sm:px-8 flex flex-col sm:flex-row items-center justify-between h-auto py-4 sm:py-0 sm:h-[72px] gap-4 sm:gap-0">
         <div className="flex items-center gap-4">
-          <img 
-            src={shnoorlogo1} 
-            alt="Shnoor" 
-            className="h-10 w-10 sm:h-12 sm:w-12 object-contain" 
-            width="48" 
-            height="48"
-            loading="eager"
-            fetchPriority="high"
-          />
+          <div className="landing-brand-logo flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center overflow-hidden rounded-xl bg-white">
+            <img 
+              src={shnoorLogo} 
+              alt="Shnoor" 
+              className="h-10 w-10 sm:h-12 sm:w-12 object-contain" 
+              width="48" 
+              height="48"
+              loading="eager"
+              fetchPriority="high"
+            />
+          </div>
           <div>
             <p className="font-bold text-shnoor-navy text-lg sm:text-xl leading-tight">SHNOOR Assessments</p>
             <p className="text-[10px] sm:text-[11px] text-shnoor-soft font-semibold uppercase tracking-widest">Secure Examination Portal</p>
@@ -69,7 +70,7 @@ const LandingPage = () => (
     </nav>
 
     {/* ── 2. HERO ────────────────────────────────────────────────────────── */}
-    <section className="bg-white py-10 sm:py-16 px-4 sm:px-8">
+    <section className="landing-hero bg-white py-10 sm:py-16 px-4 sm:px-8">
       <div className="max-w-[1280px] mx-auto grid lg:grid-cols-2 gap-10 sm:gap-16 items-center">
         {/* Left */}
         <div className="flex flex-col gap-5 sm:gap-6 items-center lg:items-start text-center lg:text-left">
@@ -92,7 +93,7 @@ const LandingPage = () => (
               <Button variant="primary" className="w-full sm:w-auto !px-8">Start Your Assessment</Button>
             </Link>
             <Link to="/login" className="w-full sm:w-auto">
-              <Button className="w-full sm:w-auto h-[50px] px-8 rounded-xl font-bold text-shnoor-navy border-2 border-shnoor-mist hover:border-shnoor-indigo hover:bg-shnoor-lavender transition-all">
+              <Button className="already-registered-btn w-full sm:w-auto h-[50px] px-8 rounded-xl font-bold text-shnoor-navy border-2 border-shnoor-mist hover:border-shnoor-indigo hover:bg-shnoor-lavender transition-all">
                 Already Registered?
               </Button>
             </Link>
@@ -154,7 +155,7 @@ const LandingPage = () => (
     </section>
 
     {/* ── 3. HOW IT WORKS ────────────────────────────────────────────────── */}
-    <section className="bg-white py-16 sm:py-24 px-4 sm:px-8 border-t border-shnoor-lavender">
+    <section className="landing-how bg-white py-16 sm:py-24 px-4 sm:px-8 border-t border-shnoor-lavender">
       <div className="max-w-[1280px] mx-auto">
         <div className="text-center mb-12 sm:mb-16">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-shnoor-navy mb-4">How It Works</h2>
@@ -179,7 +180,7 @@ const LandingPage = () => (
     </section>
 
     {/* ── 4. PLATFORM FEATURES ───────────────────────────────────────────── */}
-    <section className="bg-shnoor-lavender py-16 sm:py-24 px-4 sm:px-8">
+    <section className="landing-features bg-shnoor-lavender py-16 sm:py-24 px-4 sm:px-8">
       <div className="max-w-[1280px] mx-auto">
         <div className="text-center mb-10 sm:mb-14">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-shnoor-navy mb-4">Platform Features</h2>
@@ -200,10 +201,10 @@ const LandingPage = () => (
     </section>
 
     {/* ── 5. SECURE EXAMINATION ENV ──────────────────────────────────────── */}
-    <section className="bg-shnoor-navy py-16 sm:py-24 px-4 sm:px-8">
+    <section className="landing-secure bg-shnoor-navy py-16 sm:py-24 px-4 sm:px-8">
       <div className="max-w-[1280px] mx-auto grid lg:grid-cols-2 gap-12 sm:gap-16 items-center">
         {/* Left */}
-        <div className="text-center lg:text-left">
+        <div className="landing-secure-content text-center lg:text-left">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight mb-4">
             Secure Examination<br className="hidden sm:block" />Environment
           </h2>
@@ -231,12 +232,12 @@ const LandingPage = () => (
 
         {/* Right — Security Status Card */}
         <div>
-          <div className="bg-[#1f2937] border border-[#374151] rounded-2xl p-8">
+          <div className="landing-security-card rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="font-bold text-xl text-white">Security Status</h3>
+              <h3 className="landing-contrast-text font-bold text-xl">Security Status</h3>
               <span className="bg-shnoor-success text-white text-xs font-extrabold px-3 py-1 rounded-full uppercase tracking-widest">ACTIVE</span>
             </div>
-            <div className="space-y-0 divide-y divide-[#374151]">
+            <div className="space-y-0 divide-y divide-white/10">
               {[
                 { label: 'Fullscreen Enforcement', val: '✓ Enabled', cls: 'text-shnoor-success' },
                 { label: 'Camera Monitoring', val: '✓ Required', cls: 'text-shnoor-success' },
@@ -244,13 +245,13 @@ const LandingPage = () => (
                 { label: 'Auto-Submit', val: 'On Timeout', cls: 'text-[#60a5fa]' },
               ].map(r => (
                 <div key={r.label} className="flex items-center justify-between py-4">
-                  <span className="text-[#9ca3af]">{r.label}</span>
+                  <span className="landing-contrast-muted">{r.label}</span>
                   <span className={`text-sm font-bold ${r.cls}`}>{r.val}</span>
                 </div>
               ))}
             </div>
-            <div className="mt-6 bg-[#374151] rounded-xl p-4">
-              <p className="text-sm text-[#d1d5db] italic leading-relaxed">
+            <div className="landing-security-note mt-6 rounded-xl p-4">
+              <p className="landing-contrast-muted text-sm italic leading-relaxed">
                 "These measures ensure a fair and secure assessment process for all candidates."
               </p>
             </div>
@@ -260,7 +261,7 @@ const LandingPage = () => (
     </section>
 
     {/* ── 6. WHAT TO EXPECT ─────────────────────────────────────────────── */}
-    <section className="bg-white py-16 sm:py-24 px-4 sm:px-8">
+    <section className="landing-expect bg-white py-16 sm:py-24 px-4 sm:px-8">
       <div className="max-w-[1280px] mx-auto">
         <div className="text-center mb-10 sm:mb-14">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-shnoor-navy mb-4">What to Expect</h2>
@@ -318,7 +319,7 @@ const LandingPage = () => (
     </section>
 
     {/* ── 7. CTA ─────────────────────────────────────────────────────────── */}
-    <section className="bg-shnoor-indigo py-16 sm:py-24 px-4 sm:px-8">
+    <section className="landing-cta bg-shnoor-indigo py-16 sm:py-24 px-4 sm:px-8">
       <div className="max-w-2xl mx-auto text-center">
         <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4 sm:mb-5">Ready to Start?</h2>
         <p className="text-base sm:text-lg text-white/70 mb-8 sm:mb-10 leading-relaxed">
@@ -341,12 +342,14 @@ const LandingPage = () => (
     </section>
 
     {/* ── 8. FOOTER ──────────────────────────────────────────────────────── */}
-    <footer className="bg-shnoor-navy pt-12 sm:pt-16 pb-6 sm:pb-8 px-4 sm:px-8">
+    <footer className="landing-footer bg-shnoor-navy pt-12 sm:pt-16 pb-6 sm:pb-8 px-4 sm:px-8">
       <div className="max-w-[1280px] mx-auto">
         <div className="grid md:grid-cols-3 gap-8 sm:gap-12 mb-10 sm:mb-12 text-center md:text-left">
           <div>
             <div className="flex items-center gap-3 mb-4">
-              <img src={shnoorLogo} alt="Shnoor" className="h-9 w-9 object-contain" loading="lazy" width="36" height="36" decoding="async" />
+              <div className="landing-footer-logo flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-white">
+                <img src={shnoorLogo} alt="Shnoor" className="h-9 w-9 object-contain" loading="lazy" width="36" height="36" decoding="async" />
+              </div>
               <span className="font-extrabold text-white text-lg">SHNOOR Assessments</span>
             </div>
             <p className="text-shnoor-soft mb-6 leading-relaxed text-sm">Secure examination platform for campus recruitment drives.</p>
@@ -356,18 +359,18 @@ const LandingPage = () => (
           <div>
             <p className="text-xs font-extrabold text-shnoor-mist uppercase tracking-widest mb-5">Contacts</p>
             <ul className="flex flex-col gap-3 text-shnoor-soft">
-              <li><a href="mailto:info@shnoor.com" className="hover:text-white transition-colors">📧 info@shnoor.com (General)</a></li>
-              <li><a href="mailto:proc@shnoor.com" className="hover:text-white transition-colors">📧 proc@shnoor.com (Sales)</a></li>
-              <li><a href="tel:+919429694298" className="hover:text-white transition-colors">📞 +91-9429694298</a></li>
-              <li><a href="tel:+919041914601" className="hover:text-white transition-colors">📞 +91-9041914601</a></li>
+              <li><a href="mailto:info@shnoor.com" className="landing-footer-link transition-colors">📧 info@shnoor.com (General)</a></li>
+              <li><a href="mailto:proc@shnoor.com" className="landing-footer-link transition-colors">📧 proc@shnoor.com (Sales)</a></li>
+              <li><a href="tel:+919429694298" className="landing-footer-link transition-colors">📞 +91-9429694298</a></li>
+              <li><a href="tel:+919041914601" className="landing-footer-link transition-colors">📞 +91-9041914601</a></li>
             </ul>
           </div>
           <div>
             <p className="text-xs font-extrabold text-shnoor-mist uppercase tracking-widest mb-5">Useful Links</p>
             <ul className="flex flex-col gap-3 text-shnoor-soft">
-              <li><a href="https://www.linkedin.com/company/shnoor-international/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">We are Social</a></li>
-              <li><a href="https://api.whatsapp.com/qr/D6I7XIACKIKVD1?autoload=1&app_absent=0" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Let's Connect</a></li>
-              <li><a href="/company-profile.pdf" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Company Profile</a></li>
+              <li><a href="https://www.linkedin.com/company/shnoor-international/" target="_blank" rel="noopener noreferrer" className="landing-footer-link transition-colors">We are Social</a></li>
+              <li><a href="https://api.whatsapp.com/qr/D6I7XIACKIKVD1?autoload=1&app_absent=0" target="_blank" rel="noopener noreferrer" className="landing-footer-link transition-colors">Let's Connect</a></li>
+              <li><a href="/company-profile.pdf" target="_blank" rel="noopener noreferrer" className="landing-footer-link transition-colors">Company Profile</a></li>
             </ul>
           </div>
         </div>
@@ -376,10 +379,10 @@ const LandingPage = () => (
             <p>© Copyrights 2025. All Rights Reserved. SHNOOR INTERNATIONAL LLC</p>
             <div className="hidden sm:flex items-center gap-2">
               <span className="text-white/20">•</span>
-              <Link to="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</Link>              <span className="text-white/20">•</span>
-              <Link to="/terms-and-conditions" className="hover:text-white transition-colors">Terms &amp; Conditions</Link>            </div>
+              <Link to="/privacy-policy" className="landing-footer-link transition-colors">Privacy Policy</Link>              <span className="text-white/20">•</span>
+              <Link to="/terms-and-conditions" className="landing-footer-link transition-colors">Terms &amp; Conditions</Link>            </div>
           </div>
-          <div className="flex items-center gap-2 text-sm text-shnoor-success font-semibold">
+          <div className="landing-contrast-muted flex items-center gap-2 text-sm font-semibold">
             <Icon d={SHIELD} cls="w-4 h-4" />
             Secure Environment
           </div>

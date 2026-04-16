@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { apiFetch } from '../config/api';
 import Button from './Button';
 import InputField from './InputField';
+import ThemeSelector from './ThemeSelector';
 
 const shnoorLogo = '/favicon.png';
 
@@ -124,9 +125,12 @@ const ForgotPassword = () => {
   };
 
   return (
-    <main className="min-h-screen w-full flex font-['Plus_Jakarta_Sans',sans-serif]">
+    <main className="min-h-screen w-full flex font-['Plus_Jakarta_Sans',sans-serif] relative">
+      <div className="absolute right-4 top-4 z-20 sm:right-6 sm:top-6 lg:right-8 lg:top-8">
+        <ThemeSelector variant="light" />
+      </div>
       {/* ── LEFT PANEL (dark) ─────────────────────────────── */}
-      <div className="hidden lg:flex lg:w-[45%] flex-col justify-between bg-shnoor-navy px-14 py-12 relative overflow-hidden">
+      <div className="auth-left-panel hidden lg:flex lg:w-[45%] flex-col justify-between bg-shnoor-navy px-14 py-12 relative overflow-hidden">
         {/* Decorative gradient orbs */}
         <div className="absolute top-[-60px] left-[-60px] w-72 h-72 rounded-full bg-shnoor-indigo opacity-20 blur-3xl pointer-events-none" />
         <div className="absolute bottom-[-40px] right-[-40px] w-56 h-56 rounded-full bg-[#6868AC] opacity-15 blur-3xl pointer-events-none" />
@@ -134,25 +138,27 @@ const ForgotPassword = () => {
         {/* Brand */}
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-12">
-            <img src={shnoorLogo} alt="Shnoor" className="h-11 w-11 object-contain" width="44" height="44" />
+            <div className="site-header-logo flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-white">
+              <img src={shnoorLogo} alt="Shnoor" className="h-11 w-11 object-contain" width="44" height="44" />
+            </div>
             <div>
               <p className="font-extrabold text-white text-lg leading-tight">SHNOOR Assessments</p>
-              <p className="text-[11px] text-[#8F8FC4] uppercase tracking-widest font-semibold">Secure Examination Portal</p>
+              <p className="auth-brand-subtitle text-[11px] uppercase tracking-widest font-semibold">Secure Examination Portal</p>
             </div>
           </div>
 
           <h2 className="text-3xl font-extrabold text-white leading-tight mb-3">
             Recover your<br />
-            <span className="text-[#8F8FC4]">account</span>
+            <span className="auth-hero-accent">account</span>
           </h2>
-          <p className="text-[#8F8FC4] text-sm leading-relaxed mb-10">
+          <p className="auth-left-muted text-sm leading-relaxed mb-10">
             Forgot your password? No worries. Enter your email address to verify your identity and get back into your portal.
           </p>
         </div>
       </div>
 
       {/* ── RIGHT PANEL (white form) ───────────────────────── */}
-      <div className="flex-1 flex items-center justify-center bg-white px-6 py-12 overflow-auto">
+      <div className="auth-right-panel flex-1 flex items-center justify-center bg-white px-6 py-12 overflow-auto">
         <div className="w-full max-w-[440px]">
           {/* Mobile brand header */}
           <div className="flex items-center gap-3 mb-8 lg:hidden">

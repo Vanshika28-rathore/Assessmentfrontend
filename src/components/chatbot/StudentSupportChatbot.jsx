@@ -447,7 +447,17 @@ const StudentSupportChatbot = () => {
 
       if (data.success) {
         setSendStatus('success');
-        // Message will be added via socket event, don't add here to avoid duplication
+        // Add message immediately after API confirm; socket echo will be deduped by id check
+        setConversationHistory(prev => {
+          if (prev.find(m => m.id === data.data?.id)) return prev;
+          return [...prev, {
+            id: data.data?.id,
+            message: messageCopy,
+            sender_type: 'student',
+            created_at: data.data?.createdAt || new Date().toISOString(),
+            image_path: data.data?.imagePath || null
+          }];
+        });
       } else {
         throw new Error(data.message || 'Failed to send message');
       }

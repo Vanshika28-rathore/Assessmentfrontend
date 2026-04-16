@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Video, LogOut, Settings, MessageSquare, X, Menu } from 'lucide-react';
 import Button from './Button';
 import { useSupportSocket } from '../hooks/useSupportSocket';
-import shnoorLogo from '../assets/shnoor-logo1.png';
+import shnoorLogo from '../assets/shnoor-logo.png';
 import ThemeSelector from './ThemeSelector';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -125,7 +125,7 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
             <ThemeSelector />
             <Button
               variant="primary"
-              className="!h-10 !px-5 text-sm bg-shnoor-indigo hover:bg-[#6b6be5] hover:shadow-[0_0_15px_rgba(107,107,229,0.4)] hover:-translate-y-0.5 transition-all border-0 relative"
+              className="admin-header-action !h-10 !px-5 text-sm hover:shadow-[0_0_15px_rgba(107,107,229,0.4)] hover:-translate-y-0.5 transition-all border-0 relative"
               onClick={() => navigate('/admin/student-messages')}
             >
               <MessageSquare size={16} className="mr-2" />
@@ -138,7 +138,7 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
             </Button>
             <Button
               variant="primary"
-              className="!h-10 !px-5 text-sm bg-shnoor-indigo hover:bg-[#6b6be5] hover:shadow-[0_0_15px_rgba(107,107,229,0.4)] hover:-translate-y-0.5 transition-all border-0"
+              className="admin-header-action !h-10 !px-5 text-sm hover:shadow-[0_0_15px_rgba(107,107,229,0.4)] hover:-translate-y-0.5 transition-all border-0"
               onClick={() => navigate('/admin/live-proctoring')}
             >
               <Video size={16} className="mr-2" />
@@ -146,7 +146,7 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
             </Button>
             <Button
               variant="primary"
-              className="!h-10 !px-5 text-sm bg-shnoor-indigo hover:bg-[#6b6be5] hover:shadow-[0_0_15px_rgba(107,107,229,0.4)] hover:-translate-y-0.5 transition-all border-0"
+              className="admin-header-action !h-10 !px-5 text-sm hover:shadow-[0_0_15px_rgba(107,107,229,0.4)] hover:-translate-y-0.5 transition-all border-0"
               onClick={() => navigate('/admin/settings')}
             >
               <Settings size={16} className="mr-2" />
@@ -182,7 +182,7 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
           <div className="sm:hidden absolute top-[100%] left-0 w-full bg-shnoor-navy border-t border-white/10 shadow-xl z-40 pb-4 px-4 flex flex-col gap-2 pt-2">
             <Button
               variant="primary"
-              className="w-full justify-start !h-12 !px-4 text-sm bg-shnoor-indigo hover:bg-[#6b6be5] border-0 relative"
+              className="admin-header-action w-full justify-start !h-12 !px-4 text-sm border-0 relative"
               onClick={() => {
                 navigate('/admin/student-messages');
                 setMobileMenuOpen(false);
@@ -198,7 +198,7 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
             </Button>
             <Button
               variant="primary"
-              className="w-full justify-start !h-12 !px-4 text-sm bg-shnoor-indigo hover:bg-[#6b6be5] border-0"
+              className="admin-header-action w-full justify-start !h-12 !px-4 text-sm border-0"
               onClick={() => {
                 navigate('/admin/live-proctoring');
                 setMobileMenuOpen(false);
@@ -209,7 +209,7 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
             </Button>
             <Button
               variant="primary"
-              className="w-full justify-start !h-12 !px-4 text-sm bg-shnoor-indigo hover:bg-[#6b6be5] border-0"
+              className="admin-header-action w-full justify-start !h-12 !px-4 text-sm border-0"
               onClick={() => {
                 navigate('/admin/settings');
                 setMobileMenuOpen(false);

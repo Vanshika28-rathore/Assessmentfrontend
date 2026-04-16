@@ -281,6 +281,23 @@ const AdminDashboard = () => {
     }
   }, [navigate, activeTab, selectedTestForViolations]);
 
+  // Auto-refresh institute counts every 30 s when on institutes tab (silent — no loading state, no alerts)
+  useEffect(() => {
+    if (activeTab !== 'institutes') return;
+    const silentRefresh = async () => {
+      try {
+        const token = localStorage.getItem('adminToken');
+        const response = await apiFetch('api/institutes', { headers: { 'Authorization': `Bearer ${token}` } });
+        const data = await response.json();
+        if (response.ok && data.success) {
+          setAllInstitutes(prev => JSON.stringify(data.institutes) === JSON.stringify(prev) ? prev : data.institutes);
+        }
+      } catch { /* silent background refresh */ }
+    };
+    const intervalId = setInterval(silentRefresh, 30000);
+    return () => clearInterval(intervalId);
+  }, [activeTab]);
+
   // Close dropdown menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -1930,7 +1947,9 @@ const AdminDashboard = () => {
       setSelectedStudentsForDelete([]);
       setSelectedTestsForStudentModal([]);
       // Refresh the student list to update assigned test counts
+      // Refresh student list + institute-level counts
       handleManageStudents(selectedInstituteForStudents);
+      fetchAllInstitutes();
     } catch (error) {
       console.error('Error assigning test:', error);
       alert('❌ An error occurred while assigning tests');
@@ -2126,7 +2145,7 @@ const AdminDashboard = () => {
   const filteredViolations = getFilteredViolations();
 
   return (
-    <div className="min-h-screen bg-shnoor-lavender">
+    <div className="admin-dashboard-root min-h-screen bg-shnoor-lavender">
       {/* Header */}
       <AdminHeader />
 
@@ -2136,7 +2155,7 @@ const AdminDashboard = () => {
         {/* Tab Navigation */}
         {!showCreateTest && !selectedExamId && (
           <div className="mb-4 sm:mb-8 overflow-x-auto pb-4 sm:pb-0 hide-scrollbar">
-            <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(14,14,39,0.06)] border border-shnoor-mist p-2 flex sm:inline-flex space-x-2 min-w-max">
+            <div className="admin-tab-shell bg-white rounded-2xl shadow-[0_8px_30px_rgba(14,14,39,0.06)] border border-shnoor-mist p-2 flex sm:inline-flex space-x-2 min-w-max">
               {[
                 { id: 'exams', label: 'Manage Exams', icon: FileSpreadsheet },
                 { id: 'institutes', label: 'Manage Institutes', icon: Building2 },
@@ -2149,10 +2168,7 @@ const AdminDashboard = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all shrink-0 text-sm sm:text-base ${activeTab === tab.id
-                    ? 'bg-shnoor-indigo text-white'
-                    : 'bg-white text-shnoor-indigoMedium hover:text-shnoor-navy hover:bg-shnoor-lavender'
-                    }`}
+                  className={`admin-tab-button flex items-center space-x-2 px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-medium transition-all shrink-0 text-sm sm:text-base ${activeTab === tab.id ? 'is-active' : ''}`}
                 >
                   <tab.icon size={20} />
                   <span>{tab.label}</span>
@@ -3191,7 +3207,7 @@ const AdminDashboard = () => {
 
             {activeTab === 'institutes' && (
               <div className="space-y-6">
-                <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgba(14,14,39,0.06)] border border-shnoor-light p-4 sm:p-8">
+                <div className="admin-surface-card bg-white rounded-2xl shadow-[0_8px_30px_rgba(14,14,39,0.06)] border border-shnoor-light p-4 sm:p-8">
                   <div className="mb-6 sm:mb-8">
                     <h2 className="text-2xl sm:text-3xl font-bold text-shnoor-navy mb-2 flex items-center">
                       <Building2 className="mr-2 sm:mr-3 text-shnoor-indigo h-6 w-6 sm:h-8 sm:w-8" />
@@ -3201,7 +3217,7 @@ const AdminDashboard = () => {
                   </div>
 
                   {/* Add Institute Form */}
-                  <div className="mb-6 sm:mb-8 p-4 sm:p-6 bg-white rounded-2xl border border-shnoor-light shadow-[0_8px_30px_rgba(14,14,39,0.06)]">
+                  <div className="admin-subsurface-card mb-6 sm:mb-8 p-4 sm:p-6 bg-white rounded-2xl border border-shnoor-light shadow-[0_8px_30px_rgba(14,14,39,0.06)]">
                     <label className="text-sm font-bold text-shnoor-navy mb-3 flex items-center">
                       <Plus size={18} className="mr-2 text-shnoor-indigo" />
                       Add New Institute
@@ -3240,7 +3256,7 @@ const AdminDashboard = () => {
                   <div className="space-y-4">
                     {/* Bulk Test Assignment Section - shown when institutes are selected */}
                     {selectedInstitutes.length > 0 && (
-                      <div className="mb-6 p-4 sm:p-6 bg-shnoor-lavender rounded-2xl border-2 border-shnoor-indigo">
+                      <div className="admin-highlight-panel mb-6 p-4 sm:p-6 bg-shnoor-lavender rounded-2xl border-2 border-shnoor-indigo">
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 space-y-2 sm:space-y-0">
                           <h3 className="text-base sm:text-lg font-bold text-shnoor-navy flex items-center">
                             <FileSpreadsheet className="mr-2 text-shnoor-indigo shrink-0" size={22} />
@@ -3293,7 +3309,7 @@ const AdminDashboard = () => {
 
                             {/* Dropdown Menu with Checkboxes */}
                             {isTestDropdownOpen && (
-                              <div className="absolute z-50 w-full mt-2 bg-white border border-shnoor-light rounded-xl shadow-lg max-h-64 overflow-y-auto">
+                              <div className="admin-dropdown-menu absolute z-50 w-full mt-2 bg-white border border-shnoor-light rounded-xl shadow-lg max-h-64 overflow-y-auto">
                                 {tests.filter(test => test.status === 'published').length === 0 ? (
                                   <div className="p-4 text-center text-shnoor-indigoMedium text-sm">
                                     No published tests available
@@ -3409,20 +3425,20 @@ const AdminDashboard = () => {
                           let effectiveStatus = institute.registration_status || 'open';
                           let statusBadgeText = effectiveStatus;
                           let statusBadgeColor = effectiveStatus === 'open'
-                            ? 'bg-shnoor-successLight text-shnoor-success'
+                            ? 'admin-status-pill is-open'
                             : effectiveStatus === 'paused'
-                              ? 'bg-shnoor-warningLight text-shnoor-warning'
-                              : 'bg-shnoor-dangerLight text-shnoor-danger';
+                              ? 'admin-status-pill is-paused'
+                              : 'admin-status-pill is-closed';
 
                           // Override if not yet open
                           if (notYetOpen) {
                             statusBadgeText = 'not yet open';
-                            statusBadgeColor = 'bg-shnoor-lavender opacity-80 text-shnoor-indigo';
+                            statusBadgeColor = 'admin-status-pill is-not-yet-open';
                           }
                           // Override if deadline passed
                           else if (deadlinePassed && effectiveStatus === 'open') {
                             statusBadgeText = 'closed';
-                            statusBadgeColor = 'bg-shnoor-dangerLight text-shnoor-danger';
+                            statusBadgeColor = 'admin-status-pill is-closed';
                           }
 
                           const isInstituteSelected = selectedInstitutes.includes(institute.id);
