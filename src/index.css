@@ -471,6 +471,10 @@ html[data-theme='dark'] .admin-status-pill.is-closed { background-color: transpa
 :is(html[data-theme='dark'],html[data-theme='green']) :is(.site-header-logo,.landing-brand-logo,.landing-footer-logo) { background-color: rgb(var(--theme-logo-bg)); border: 1px solid rgb(var(--theme-logo-border) / 0.35); border-radius: 0.9rem; box-shadow: var(--theme-logo-shadow); padding: 0.25rem; }
 
 :is(html[data-theme='dark'],html[data-theme='green']) .site-header-subtitle { color: rgb(var(--theme-auth-accent)) !important; opacity: 1 !important; }
+html[data-theme='green'] :is(.bg-shnoor-navy,.landing-footer,.landing-secure) :is(.site-header-subtitle,.text-shnoor-soft,.text-shnoor-light,.text-shnoor-mist,.landing-footer-link,.landing-contrast-muted) { color: rgb(var(--theme-contrast-muted)) !important; }
+html[data-theme='green'] .landing-root .bg-\[\#6B6BAE\]\/20 { background-color: rgb(var(--theme-panel-strong)) !important; }
+html[data-theme='green'] .landing-root .border-shnoor-indigo\/30 { border-color: rgb(var(--theme-accent) / 0.32) !important; }
+html[data-theme='green'] :is(.landing-cta,.landing-footer) :is(.text-white\/50,.text-white\/60,.text-white\/70) { color: rgb(220 232 220 / 0.88) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) .landing-secure :is(.text-shnoor-soft,.landing-contrast-muted) { color: rgb(var(--theme-contrast-muted)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) .landing-secure .text-\[\#60a5fa\] { color: rgb(var(--theme-auth-accent)) !important; }
 /* Admin message bubble needs more contrast vs card bg in dark theme */
@@ -484,6 +488,8 @@ html[data-theme='dark'] .bg-shnoor-lavender { background-color: rgb(58 58 95) !i
 :is(html[data-theme='dark'],html[data-theme='green']) .landing-cta { background-color: rgb(var(--theme-landing-cta)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) .landing-root .text-shnoor-navy { color: rgb(var(--theme-landing-text)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) .landing-root :is(.text-shnoor-soft,.text-shnoor-indigoMedium,.text-\[\#4b5563\],.text-\[\#9ca3af\],.text-\[\#d1d5db\]) { color: rgb(var(--theme-landing-muted)) !important; }
+html[data-theme='green'] body .landing-footer .text-shnoor-soft, html[data-theme='green'] body .landing-secure .text-shnoor-soft { color: rgb(209 209 197) !important; }
+html:not([data-theme='green']) .landing-footer .landing-contrast-muted { color: #4ade80 !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) .landing-root .text-shnoor-indigo { color: rgb(var(--theme-accent)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) .landing-root :is(.bg-white,.bg-shnoor-lavender) { background-color: rgb(var(--theme-card)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) .landing-root :is(.bg-shnoor-indigo,button.bg-shnoor-indigo,.already-registered-btn) { background-color: rgb(var(--theme-accent)) !important; border-color: rgb(var(--theme-accent)) !important; color: #fff !important; }

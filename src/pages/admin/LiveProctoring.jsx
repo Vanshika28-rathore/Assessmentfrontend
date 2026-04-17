@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { ArrowLeft, Users, Wifi, WifiOff, Camera, Clock, MessageCircle, StopCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Users, Wifi, WifiOff, Camera, Clock, MessageCircle, StopCircle, AlertTriangle, Mic, MicOff } from 'lucide-react';
 import AdminChatModal from '../../components/admin/AdminChatModal';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -16,7 +16,80 @@ const LiveProctoring = () => {
   const [isStopModalOpen, setIsStopModalOpen] = useState(false);
   const [stopReason, setStopReason] = useState('');
   const [isStoppingTest, setIsStoppingTest] = useState(false);
+  const [enabledMicStudents, setEnabledMicStudents] = useState(new Set());
   const socketRef = useRef(null);
+  const enabledMicStudentsRef = useRef(new Set());
+  const audioElementsRef = useRef(new Map());
+  const audioQueuesRef = useRef(new Map());
+  const audioPlayingRef = useRef(new Map());
+
+  const playNextAudioChunk = (studentId) => {
+    if (!enabledMicStudentsRef.current.has(studentId)) {
+      return;
+    }
+
+    if (audioPlayingRef.current.get(studentId)) {
+      return;
+    }
+
+    const queue = audioQueuesRef.current.get(studentId) || [];
+    if (queue.length === 0) {
+      return;
+    }
+
+    const nextChunk = queue.shift();
+    audioQueuesRef.current.set(studentId, queue);
+
+    let audioEl = audioElementsRef.current.get(studentId);
+    if (!audioEl) {
+      audioEl = new Audio();
+      audioEl.preload = 'none';
+      audioElementsRef.current.set(studentId, audioEl);
+    }
+
+    audioPlayingRef.current.set(studentId, true);
+
+    const finishPlayback = () => {
+      audioPlayingRef.current.set(studentId, false);
+      playNextAudioChunk(studentId);
+    };
+
+    audioEl.onended = finishPlayback;
+    audioEl.onerror = finishPlayback;
+    audioEl.src = nextChunk;
+    audioEl.play().catch(() => {
+      audioPlayingRef.current.set(studentId, false);
+    });
+  };
+
+  const stopStudentAudio = (studentId) => {
+    const audioEl = audioElementsRef.current.get(studentId);
+    if (audioEl) {
+      audioEl.pause();
+      audioEl.src = '';
+      audioEl.onended = null;
+      audioEl.onerror = null;
+    }
+    audioQueuesRef.current.delete(studentId);
+    audioPlayingRef.current.set(studentId, false);
+  };
+
+  const toggleStudentMic = (studentId) => {
+    setEnabledMicStudents(prev => {
+      const next = new Set(prev);
+      if (next.has(studentId)) {
+        next.delete(studentId);
+        stopStudentAudio(studentId);
+      } else {
+        next.add(studentId);
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    enabledMicStudentsRef.current = enabledMicStudents;
+  }, [enabledMicStudents]);
 
 
   useEffect(() => {
@@ -114,6 +187,13 @@ const LiveProctoring = () => {
         newMap.delete(leftStudentId);
         return newMap;
       });
+
+      setEnabledMicStudents(prev => {
+        const next = new Set(prev);
+        next.delete(leftStudentId);
+        return next;
+      });
+      stopStudentAudio(leftStudentId);
     });
 
     // Receive video frames from students
@@ -127,6 +207,26 @@ const LiveProctoring = () => {
         newMap.set(String(studentId), frame);
         return newMap;
       });
+    });
+
+    // Receive audio chunks from students and play only for explicitly enabled student cards
+    socket.on('proctoring:audio', (data) => {
+      const studentId = String(data.studentId);
+
+      if (!enabledMicStudentsRef.current.has(studentId)) {
+        return;
+      }
+
+      const queue = audioQueuesRef.current.get(studentId) || [];
+      queue.push(data.audioDataUrl);
+
+      // Keep queue size reasonable to balance responsiveness vs stability
+      if (queue.length > 5) {
+        queue.shift();
+      }
+
+      audioQueuesRef.current.set(studentId, queue);
+      playNextAudioChunk(studentId);
     });
 
     // Handle force-stop success
@@ -156,6 +256,13 @@ const LiveProctoring = () => {
 
     // Cleanup
     return () => {
+      audioElementsRef.current.forEach((audioEl) => {
+        audioEl.pause();
+        audioEl.src = '';
+      });
+      audioElementsRef.current.clear();
+      audioQueuesRef.current.clear();
+      audioPlayingRef.current.clear();
       socket.disconnect();
     };
   }, [navigate]);
@@ -342,13 +449,25 @@ const LiveProctoring = () => {
 
                     {/* Chat Button */}
                     <div className="mt-4 pt-3 border-t border-shnoor-light">
-                      <button
-                        onClick={() => handleOpenChat(session)}
-                        className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-shnoor-navy text-white rounded-lg hover:bg-opacity-90 transition-colors"
-                      >
-                        <MessageCircle size={16} />
-                        <span className="text-sm font-medium">Send Message</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => toggleStudentMic(sessionKey)}
+                          className={`px-3 py-2 rounded-lg border transition-colors ${enabledMicStudents.has(sessionKey)
+                            ? 'bg-shnoor-success text-white border-shnoor-success'
+                            : 'bg-white text-shnoor-indigoMedium border-shnoor-light hover:bg-shnoor-lavender'
+                            }`}
+                          title={enabledMicStudents.has(sessionKey) ? 'Turn off mic listening' : 'Turn on mic listening'}
+                        >
+                          {enabledMicStudents.has(sessionKey) ? <Mic size={16} /> : <MicOff size={16} />}
+                        </button>
+                        <button
+                          onClick={() => handleOpenChat(session)}
+                          className="flex-1 flex items-center justify-center space-x-2 px-4 py-2 bg-shnoor-navy text-white rounded-lg hover:bg-opacity-90 transition-colors"
+                        >
+                          <MessageCircle size={16} />
+                          <span className="text-sm font-medium">Send Message</span>
+                        </button>
+                      </div>
                     </div>
 
                     {/* Stop Test Button */}
