@@ -8,6 +8,10 @@ const GlobalThemeSelector = () => {
 
   if (
     HIDDEN_ROUTES.has(location.pathname) ||
+    location.pathname === '/privacy-policy' ||
+    location.pathname === '/terms-and-conditions' ||
+    location.pathname === '/job-board' ||
+    location.pathname === '/student/my-applications' ||
     location.pathname.startsWith('/admin') ||
     location.pathname.startsWith('/dashboard') ||
     location.pathname.startsWith('/test')

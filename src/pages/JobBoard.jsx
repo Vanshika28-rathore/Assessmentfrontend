@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, Briefcase, Building2, Clock, ArrowLeft, Loader2, RefreshCw, Search, CheckCircle2, CheckCircle, X } from 'lucide-react';
 import { apiFetch } from '../config/api';
+import ThemeSelector from '../components/ThemeSelector';
 
 const fmtDeadline = (iso) =>
     iso
@@ -253,6 +254,7 @@ export default function JobBoard({ isEmbedded = false }) {
                                     <LogOut size={16} />
                                     <span className="hidden sm:inline">Logout</span>
                                 </button>
+                                <ThemeSelector variant="dark" />
                             </div>
                         </div>
                     </div>

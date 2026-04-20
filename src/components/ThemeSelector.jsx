@@ -86,6 +86,9 @@ const ThemeSelector = ({ className = '', variant = 'dark' }) => {
         type="button"
         onClick={() => setIsOpen((open) => !open)}
         className={`theme-selector-trigger theme-selector-trigger--${variant} flex h-10 w-10 items-center justify-center rounded-xl ${className}`}
+        aria-label="Change theme"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
         title="Change theme"
       >
         <ActiveIcon size={18} />

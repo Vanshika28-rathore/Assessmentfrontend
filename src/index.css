@@ -371,7 +371,7 @@ body {
 html[data-theme='dark'] {
   color-scheme: dark;
   --theme-page: 15 15 26;  --theme-card: 26 26 46;  --theme-panel: 42 42 62;
-  --theme-panel-strong: 26 26 55;  --theme-text: 240 240 245;  --theme-text-muted: 160 160 184;
+  --theme-panel-strong: 26 26 55;  --theme-text: 240 240 245;  --theme-text-muted: 188 188 214;
   --theme-border: 99 102 241;  --theme-shell-stroke: 99 102 241;
   --theme-accent: 99 102 241;  --theme-accent-strong: 129 140 248;
   --theme-header: 15 15 26;  --theme-header-border: 99 102 241;
@@ -458,7 +458,7 @@ body { background-color: rgb(var(--theme-page)); color: rgb(var(--theme-text)); 
 html[data-theme='dark'] .admin-status-pill.is-closed { background-color: transparent; border-color: rgb(239 68 68 / 0.45); }
 
 /* ── Theme Overrides (hard-coded Tailwind utilities in non-migrated pages) ── */
-:is(html[data-theme='dark'],html[data-theme='green']) body :is(.bg-white,.bg-\[\#ffffff\],.bg-\[\#F8F8FB\],.bg-gray-50,.bg-gray-50\/50,.bg-gray-100) { background-color: rgb(var(--theme-card)) !important; }
+:is(html[data-theme='dark'],html[data-theme='green']) body :is(.bg-white,.bg-\[\#ffffff\],.bg-\[\#F8F8FB\],.bg-\[\#F8FAFC\],.bg-gray-50,.bg-gray-50\/50,.bg-gray-100) { background-color: rgb(var(--theme-card)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) body :is(.bg-shnoor-lavender,.bg-shnoor-lavender\/30) { background-color: rgb(var(--theme-panel)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) body .bg-shnoor-navy { background-color: rgb(var(--theme-header)) !important; border-bottom-color: rgb(var(--theme-header-border)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) body :is(.bg-shnoor-indigo,button.bg-shnoor-indigo,.\!bg-shnoor-indigo) { background-color: rgb(var(--theme-accent)) !important; color: #fff !important; }

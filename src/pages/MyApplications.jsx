@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, ArrowLeft, Briefcase, Loader2, RefreshCw, CheckCircle, Clock, FileText, AlertTriangle, XCircle, Trophy, PlayCircle, Award, ChevronDown } from 'lucide-react';
 import { apiFetch } from '../config/api';
+import ThemeSelector from '../components/ThemeSelector';
 
 const STATUS_CONFIG = {
     submitted: { label: 'Submitted', color: 'blue', icon: FileText },
@@ -220,6 +221,7 @@ export default function MyApplications({ isEmbedded = false }) {
                                     <LogOut size={16} />
                                     <span className="hidden sm:inline">Logout</span>
                                 </button>
+                                <ThemeSelector variant="dark" />
                             </div>
                         </div>
                     </div>

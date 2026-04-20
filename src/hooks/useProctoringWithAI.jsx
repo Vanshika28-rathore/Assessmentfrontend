@@ -3,8 +3,8 @@ import { io } from 'socket.io-client';
 import { useAICheatingDetection } from './useAICheatingDetection';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-const FRAME_RATE = 5; // 5 frames per second
-const FRAME_INTERVAL = 1000 / FRAME_RATE; // 200ms
+const FRAME_RATE = 2; // Reduced from 5 to lower CPU usage during active exam screens
+const FRAME_INTERVAL = 1000 / FRAME_RATE;
 
 export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceived, onForceStop) => {
   const [stream, setStream] = useState(null);
@@ -487,12 +487,12 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
             audioContextRef.current = audioContext;
             analyserRef.current = analyser;
             
-            // Analyze audio every 1 second
+            // Analyze audio every 2 seconds to reduce main-thread pressure
             voiceAnalysisIntervalRef.current = setInterval(() => {
               if (audioContextRef.current && analyserRef.current) {
                 analyzeAudio(audioContextRef.current, analyserRef.current);
               }
-            }, 1000);
+            }, 2000);
             
             console.log('[Proctoring] ✅ Audio analysis started');
 
@@ -543,7 +543,7 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
                   });
                 };
                 reader.readAsDataURL(wavBlob);
-              }, 1200);
+              }, 2000);
 
               console.log('[Proctoring] ✅ WAV audio chunk streaming started');
             } catch (audioStreamErr) {
@@ -562,7 +562,7 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
             ctx.drawImage(videoRef.current, 0, 0, 640, 480);
             detectBlur(canvasRef.current, ctx);
           }
-        }, 5000); // Check blur every 5 seconds
+        }, 8000); // Check blur less frequently to reduce main-thread pressure
         
         // Capture and send frames
         frameIntervalRef.current = setInterval(() => {

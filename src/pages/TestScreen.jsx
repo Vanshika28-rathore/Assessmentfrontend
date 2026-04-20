@@ -12,7 +12,6 @@ import remarkGfm from 'remark-gfm';
 
 import StudentMessageAlert from '../components/student/StudentMessageAlert';
 import StudentWarningsSidebar from '../components/student/StudentWarningsSidebar';
-import Editor from '@monaco-editor/react';
 import LazyMonacoEditor from '../components/LazyMonacoEditor';
 import {
   Clock,
