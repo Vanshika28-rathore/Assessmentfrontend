@@ -4,8 +4,7 @@ import { apiFetch } from '../config/api';
 import Button from './Button';
 import InputField from './InputField';
 import ThemeSelector from './ThemeSelector';
-
-const shnoorLogo = '/favicon.png';
+import shnoorLogo from '../assets/shnoor-logo.png';
 
 const ForgotPassword = () => {
   const navigate = useNavigate();

@@ -468,7 +468,7 @@ html[data-theme='dark'] .admin-status-pill.is-closed { background-color: transpa
 :is(html[data-theme='dark'],html[data-theme='green']) body :is(.border-shnoor-mist,.border-shnoor-light,.border-gray-200,.border-gray-300) { border-color: rgb(var(--theme-border)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) body :is(input,textarea,select) { background-color: rgb(var(--theme-card)) !important; color: rgb(var(--theme-text)) !important; border-color: rgb(var(--theme-border)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) body :is(input,textarea)::placeholder { color: rgb(var(--theme-text-muted) / 0.8) !important; }
-:is(html[data-theme='dark'],html[data-theme='green']) :is(.site-header-logo,.landing-brand-logo,.landing-footer-logo) { background-color: rgb(var(--theme-logo-bg)); border: 1px solid rgb(var(--theme-logo-border) / 0.35); border-radius: 0.9rem; box-shadow: var(--theme-logo-shadow); padding: 0.25rem; }
+:is(html[data-theme='dark'],html[data-theme='green']) :is(.site-header-logo,.landing-brand-logo,.landing-footer-logo) { background-color: rgb(var(--theme-logo-bg)) !important; border: 1px solid rgb(var(--theme-logo-border) / 0.35) !important; border-radius: 0.9rem; box-shadow: var(--theme-logo-shadow); padding: 0.25rem; }
 
 :is(html[data-theme='dark'],html[data-theme='green']) .site-header-subtitle { color: rgb(var(--theme-auth-accent)) !important; opacity: 1 !important; }
 html[data-theme='green'] :is(.bg-shnoor-navy,.landing-footer,.landing-secure) :is(.site-header-subtitle,.text-shnoor-soft,.text-shnoor-light,.text-shnoor-mist,.landing-footer-link,.landing-contrast-muted) { color: rgb(var(--theme-contrast-muted)) !important; }

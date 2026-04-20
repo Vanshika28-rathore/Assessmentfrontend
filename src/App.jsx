@@ -6,6 +6,7 @@ import { AdminAuthProvider } from './contexts/AdminAuthContext';
 import AdminProtectedRoute from './components/AdminProtectedRoute';
 import GlobalThemeSelector from './components/GlobalThemeSelector';
 import { applyTheme, getSavedTheme } from './utils/theme';
+import LandingPage from './pages/LandingPage';
 
 // Eagerly load Loading Spinner to show while chunks are fetched
 const LoadingFallback = () => (
@@ -23,7 +24,6 @@ const Instructions = React.lazy(() => import('./pages/Instructions'));
 const TestScreen = React.lazy(() => import('./pages/TestScreen'));
 const Result = React.lazy(() => import('./pages/Results'));
 const Feedback = React.lazy(() => import('./pages/Feedback'));
-const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 const AdminDashboard = React.lazy(() => import('./pages/admin/AdminDashboard'));
 const AdminReports = React.lazy(() => import('./pages/admin/AdminReports'));
 const LiveProctoring = React.lazy(() => import('./pages/admin/LiveProctoring'));

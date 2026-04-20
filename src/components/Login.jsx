@@ -6,8 +6,7 @@ import Button from './Button';
 import Badge from './Badge';
 import InputField from './InputField';  
 import ThemeSelector from './ThemeSelector';
-
-const shnoorLogo = '/favicon.png';
+import shnoorLogo from '../assets/shnoor-logo.png';
 
 // Eye icons
 const EyeOpen = () => (

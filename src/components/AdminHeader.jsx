@@ -111,7 +111,7 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
               <img
                 src={shnoorLogo}
                 alt="Shnoor Logo"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
             </div>
             <div className="flex-1 min-w-0">

@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { apiFetch } from '../config/api';
-const shnoorLogo = '/favicon.png';
 import Button from './Button';
 import InputField from './InputField';
 import ThemeSelector from './ThemeSelector';
+import shnoorLogo from '../assets/shnoor-logo.png';
 
 /* ─── Icon helpers ──────────────────────────────────────────────────────────── */
 const EyeOpen = () => (

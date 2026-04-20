@@ -392,7 +392,7 @@ const Dashboard = () => {
                 <img
                   src={shnoorLogo}
                   alt="Shnoor Logo"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               </div>
               <div>
