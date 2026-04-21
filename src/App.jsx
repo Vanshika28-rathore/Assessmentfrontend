@@ -36,6 +36,7 @@ const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy'));
 const TermsAndConditions = React.lazy(() => import('./pages/TermsAndConditions'));
 const JobBoard = React.lazy(() => import('./pages/JobBoard'));
 const MyApplications = React.lazy(() => import('./pages/MyApplications'));
+const AIInterviewPage = React.lazy(() => import('./pages/AIInterviewPage'));
 
 // Protected Route wrappers
 const StudentRoute = ({ children }) => {
@@ -90,6 +91,9 @@ function App() {
 
               {/* Student Interview Route */}
               <Route path="/interview-room/:interviewId" element={<StudentRoute><InterviewRoom /></StudentRoute>} />
+
+              {/* AI Interview Practice Route */}
+              <Route path="/ai-interview" element={<StudentRoute><AIInterviewPage /></StudentRoute>} />
 
               {/* Default */}
               <Route path="*" element={<Navigate to="/" replace />} />
