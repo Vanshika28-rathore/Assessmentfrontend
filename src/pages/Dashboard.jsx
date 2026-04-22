@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { LogOut, Clock, BookOpen, AlertCircle, FileText, X, Video, Briefcase } from 'lucide-react';
+import { LogOut, Clock, BookOpen, AlertCircle, FileText, X, Video, Briefcase, Sparkles } from 'lucide-react';
 import ExamSearchFilter from '../components/ExamSearchFilter';
 import StudentInterviews from '../components/StudentInterviews';
 import JobBoard from './JobBoard';
@@ -445,6 +445,13 @@ const Dashboard = () => {
             >
               <Video size={18} className="sm:w-5 sm:h-5 flex-shrink-0" />
               <span>Interviews</span>
+            </button>
+            <button
+              onClick={() => navigate('/ai-interview')}
+              className="flex items-center space-x-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-medium transition-all text-sm sm:text-base bg-white text-shnoor-indigoMedium hover:text-shnoor-navy hover:bg-shnoor-lavender"
+            >
+              <Sparkles size={18} className="sm:w-5 sm:h-5 flex-shrink-0 text-shnoor-indigo" />
+              <span>AI Interview</span>
             </button>
             <button
               onClick={() => setActiveTab('job-board')}

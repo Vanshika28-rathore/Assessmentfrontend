@@ -538,8 +538,8 @@ const StudentMessages = () => {
           <ArrowLeft size={18} />
           Back to Dashboard
         </button>
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold text-shnoor-navy">Student Support</h1>
             <p className="text-shnoor-soft text-sm mt-1">
               Manage student support messages and inquiries
@@ -550,10 +550,10 @@ const StudentMessages = () => {
               )}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
             <button
               onClick={() => setShowAnalytics(!showAnalytics)}
-              className={`flex items-center gap-2 px-3 py-2 text-sm border rounded-lg transition-colors ${
+              className={`flex items-center justify-center gap-2 px-3 py-2 text-sm border rounded-lg transition-colors flex-1 sm:flex-none ${
                 showAnalytics 
                   ? 'bg-shnoor-indigo text-white border-shnoor-indigo' 
                   : 'bg-white border-shnoor-mist hover:bg-shnoor-lavender'
@@ -567,7 +567,7 @@ const StudentMessages = () => {
                 setBulkDeleteMode(!bulkDeleteMode);
                 setSelectedConversations(new Set());
               }}
-              className={`flex items-center gap-2 px-3 py-2 text-sm border rounded-lg transition-colors ${
+              className={`flex items-center justify-center gap-2 px-3 py-2 text-sm border rounded-lg transition-colors flex-1 sm:flex-none ${
                 bulkDeleteMode 
                   ? 'bg-red-600 text-white border-red-600' 
                   : 'bg-white border-shnoor-mist hover:bg-shnoor-lavender'
@@ -578,7 +578,7 @@ const StudentMessages = () => {
             </button>
             <button
               onClick={fetchMessages}
-              className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-shnoor-mist rounded-lg hover:bg-shnoor-lavender transition-colors"
+              className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-white border border-shnoor-mist rounded-lg hover:bg-shnoor-lavender transition-colors flex-1 sm:flex-none"
             >
               <RefreshCw size={16} />
               Refresh
@@ -586,7 +586,7 @@ const StudentMessages = () => {
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="flex items-center gap-2 px-3 py-2 text-sm bg-shnoor-indigo text-white rounded-lg hover:bg-shnoor-navy transition-colors"
+                className="flex items-center justify-center gap-2 px-3 py-2 text-sm bg-shnoor-indigo text-white rounded-lg hover:bg-shnoor-navy transition-colors flex-1 sm:flex-none"
               >
                 <CheckCheck size={16} />
                 Mark All Read
@@ -768,12 +768,12 @@ const StudentMessages = () => {
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-shnoor-mist p-4 mb-6">
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-2">
             <Filter size={16} className="text-shnoor-soft" />
             <span className="text-sm font-medium text-shnoor-navy">Filter:</span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {[{ key: 'all', label: 'All Messages' }, { key: 'unread', label: 'Unread' }].map(({ key, label }) => (
               <button
                 key={key}
@@ -791,12 +791,12 @@ const StudentMessages = () => {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <Building size={16} className="text-shnoor-soft" />
             <select
               value={selectedCollege}
               onChange={(e) => { setSelectedCollege(e.target.value); setPagination(prev => ({ ...prev, page: 1 })); }}
-              className="px-3 py-1.5 text-sm border border-shnoor-mist rounded-lg focus:border-shnoor-indigo outline-none min-w-[200px]"
+              className="px-3 py-1.5 text-sm border border-shnoor-mist rounded-lg focus:border-shnoor-indigo outline-none w-full sm:w-auto sm:min-w-[200px]"
             >
               <option value="">All Colleges</option>
               {colleges.map(college => <option key={college} value={college}>{college}</option>)}

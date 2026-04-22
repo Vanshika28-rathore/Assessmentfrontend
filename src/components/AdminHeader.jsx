@@ -103,7 +103,7 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
 
   return (
     <>
-      <header className="w-full bg-shnoor-navy h-[60px] sm:h-[72px] shadow-md relative z-50">
+      <header className="fixed top-0 left-0 right-0 w-full bg-shnoor-navy h-[60px] sm:h-[72px] shadow-md z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full flex items-center justify-between">
           <div className="flex items-center gap-3 sm:gap-4">
             {/* Logo icon */}
@@ -232,6 +232,8 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
           </div>
         )}
       </header>
+
+      <div className="h-[60px] sm:h-[72px]" />
 
       {/* Toast Notification */}
       {toastNotification && (

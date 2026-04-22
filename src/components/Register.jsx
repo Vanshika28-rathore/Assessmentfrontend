@@ -88,6 +88,7 @@ const ReviewSection = ({ title, stepIndex, onEdit, children }) => (
       <p className="text-xs font-extrabold text-shnoor-indigo uppercase tracking-widest">{title}</p>
       <Button
         type="button"
+        variant="secondary"
         onClick={() => onEdit(stepIndex)}
         className="flex items-center gap-1.5 text-xs font-bold text-shnoor-indigo hover:text-shnoor-navy transition-colors group"
       >
@@ -134,7 +135,9 @@ const Register = () => {
         const res = await apiFetch('api/institutes/public', { method: 'GET' });
         const data = await res.json();
         if (data.success && data.institutes) setInstitutes(data.institutes);
-      } catch { }
+      } catch {
+        // Keep registration usable even if institute list API is temporarily unavailable.
+      }
     })();
   }, []);
 

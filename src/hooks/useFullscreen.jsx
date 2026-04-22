@@ -14,10 +14,23 @@ export const useFullscreen = () => {
       } else if (element.msRequestFullscreen) {
         await element.msRequestFullscreen();
       }
+      return true;
     } catch (err) {
-      console.error('Fullscreen error:', err);
+      const message = String(err?.message || '').toLowerCase();
+      const name = String(err?.name || '').toLowerCase();
+      const isPermissionOrGestureBlock =
+        name.includes('notallowederror') ||
+        message.includes('permission') ||
+        message.includes('gesture') ||
+        message.includes('user activation');
+
+      if (!isPermissionOrGestureBlock) {
+        console.error('Fullscreen error:', err);
+      }
+      setShowWarning(true);
+      return false;
     }
-  }, []);
+  }, [setShowWarning]);
 
   const exitFullscreen = useCallback(async () => {
     try {
@@ -42,8 +55,8 @@ export const useFullscreen = () => {
       
       setIsFullscreen(!!fullscreenElement);
       
-      // Show warning if user exits fullscreen during test
-      if (!fullscreenElement && window.location.pathname === '/test') {
+      // Show warning if user exits fullscreen during proctored routes (suppress during test submission)
+      if (!fullscreenElement && (window.location.pathname === '/test' || window.location.pathname === '/ai-interview') && !window.__testSubmitting) {
         setShowWarning(true);
       } else if (fullscreenElement) {
         // Hide warning when entering fullscreen

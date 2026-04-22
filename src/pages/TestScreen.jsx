@@ -111,6 +111,7 @@ int main() {
   const {
     isFullscreen,
     showWarning,
+    setShowWarning,
     enterFullscreen
   } = useFullscreen();
 
@@ -362,11 +363,16 @@ int main() {
     // Enter fullscreen mode
     console.log('[Fullscreen] Requesting fullscreen mode...');
     try {
-      await enterFullscreen();
-      console.log('[Fullscreen] Fullscreen mode activated');
+      const fullscreenResult = await enterFullscreen();
+      if (fullscreenResult) {
+        console.log('[Fullscreen] Fullscreen mode activated');
+        setShowWarning(false);
+      } else {
+        setShowWarning(true);
+      }
     } catch (fullscreenErr) {
       console.error('[Fullscreen] Failed to enter fullscreen:', fullscreenErr);
-      // Don't block test if fullscreen fails - the warning modal will show
+      setShowWarning(true);
     }
 
     // Mark exam as started
@@ -529,12 +535,25 @@ int main() {
             }
 
             try {
-              // Enter fullscreen on resume
-              await enterFullscreen();
-              console.log('[Fullscreen] Fullscreen mode activated on resume');
-            } catch (fullscreenErr) {
-              console.error('[Fullscreen] Failed to resume fullscreen:', fullscreenErr);
-              // Don't block - the warning modal will show
+              const fullscreenElement =
+                document.fullscreenElement ||
+                document.webkitFullscreenElement ||
+                document.msFullscreenElement;
+
+              if (!fullscreenElement) {
+                const fullscreenResult = await enterFullscreen();
+                if (fullscreenResult) {
+                  console.log('[Fullscreen] Fullscreen mode activated on resume');
+                  setShowWarning(false);
+                } else {
+                  console.log('[Fullscreen] Fullscreen mode not activated on resume');
+                  setShowWarning(true);
+                }
+              } else {
+                setShowWarning(false);
+              }
+            } catch {
+              setShowWarning(true);
             }
           } else {
             // No saved progress, use full duration
@@ -776,7 +795,7 @@ int main() {
   return (
     <div className="h-screen bg-shnoor-lavender flex flex-col overflow-hidden">
       {/* Fullscreen Warning Modal */}
-      {showWarning && (
+      {showWarning && !isFullscreen && (
         <FullscreenWarning onEnterFullscreen={enterFullscreen} />
       )}
 
@@ -835,6 +854,8 @@ int main() {
               <button
                 onClick={() => {
                   if (window.confirm('Are you sure you want to finish and submit the test? This action cannot be undone.')) {
+                    window.__testSubmitting = true;
+                    setShowWarning(false);
                     submitTest('manual');
                   }
                 }}
@@ -1702,7 +1723,7 @@ int main() {
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 bg-shnoor-navy">
+                <div className="flex-1 overflow-y-auto p-4 bg-shnoor-navy" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
                   {bottomPanelTab === 'testCases' ? (
                     codingConsoleOutput[currentQuestion]?.running ? (
                       <div className="flex items-center space-x-2 text-shnoor-warning">
