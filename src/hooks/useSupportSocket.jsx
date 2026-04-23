@@ -35,8 +35,8 @@ const showBrowserNotification = (title, body, options = {}) => {
   try {
     const notification = new Notification(title, {
       body,
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
+      icon: '/favicon.png',
+      badge: '/favicon.png',
       tag: options.tag || 'support-message',
       requireInteraction: false,
       silent: false,

@@ -3,8 +3,8 @@ import { io } from 'socket.io-client';
 import { useAICheatingDetection } from './useAICheatingDetection';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-const FRAME_RATE = 5; // 5 frames per second
-const FRAME_INTERVAL = 1000 / FRAME_RATE; // 200ms
+const FRAME_RATE = 2; // Reduced from 5 to lower CPU usage during active exam screens
+const FRAME_INTERVAL = 1000 / FRAME_RATE;
 
 export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceived, onForceStop) => {
   const [stream, setStream] = useState(null);
@@ -27,10 +27,60 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
   const cameraCheckIntervalRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
+  const audioProcessorRef = useRef(null);
+  const silentGainRef = useRef(null);
+  const audioChunkIntervalRef = useRef(null);
+  const audioSampleBufferRef = useRef([]);
   const voiceAnalysisIntervalRef = useRef(null);
   const blurDetectionIntervalRef = useRef(null);
   const voiceActivityStartRef = useRef(null);
   const lastViolationTimeRef = useRef({});
+
+  const encodeWavChunk = useCallback((sampleChunks, sampleRate) => {
+    const totalLength = sampleChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    if (totalLength === 0) {
+      return null;
+    }
+
+    const mergedSamples = new Float32Array(totalLength);
+    let offset = 0;
+    sampleChunks.forEach((chunk) => {
+      mergedSamples.set(chunk, offset);
+      offset += chunk.length;
+    });
+
+    const buffer = new ArrayBuffer(44 + mergedSamples.length * 2);
+    const view = new DataView(buffer);
+
+    const writeString = (viewRef, writeOffset, text) => {
+      for (let index = 0; index < text.length; index += 1) {
+        viewRef.setUint8(writeOffset + index, text.charCodeAt(index));
+      }
+    };
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + mergedSamples.length * 2, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, mergedSamples.length * 2, true);
+
+    let pcmOffset = 44;
+    mergedSamples.forEach((sample) => {
+      const normalizedSample = Math.max(-1, Math.min(1, sample));
+      view.setInt16(pcmOffset, normalizedSample < 0 ? normalizedSample * 0x8000 : normalizedSample * 0x7fff, true);
+      pcmOffset += 2;
+    });
+
+    return new Blob([view], { type: 'audio/wav' });
+  }, []);
 
   // Centralized violation handler - sends to backend and notifies parent
   const sendViolation = useCallback((violation) => {
@@ -437,14 +487,68 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
             audioContextRef.current = audioContext;
             analyserRef.current = analyser;
             
-            // Analyze audio every 1 second
+            // Analyze audio every 2 seconds to reduce main-thread pressure
             voiceAnalysisIntervalRef.current = setInterval(() => {
               if (audioContextRef.current && analyserRef.current) {
                 analyzeAudio(audioContextRef.current, analyserRef.current);
               }
-            }, 1000);
+            }, 2000);
             
             console.log('[Proctoring] ✅ Audio analysis started');
+
+            // Stream audio chunks for admin live listening using WAV chunks for broad playback support.
+            try {
+              const processor = audioContext.createScriptProcessor(4096, 1, 1);
+              const silentGain = audioContext.createGain();
+              silentGain.gain.value = 0;
+
+              audioSampleBufferRef.current = [];
+              processor.onaudioprocess = (event) => {
+                const inputSamples = event.inputBuffer.getChannelData(0);
+                audioSampleBufferRef.current.push(new Float32Array(inputSamples));
+              };
+
+              microphone.connect(processor);
+              processor.connect(silentGain);
+              silentGain.connect(audioContext.destination);
+
+              audioProcessorRef.current = processor;
+              silentGainRef.current = silentGain;
+
+              audioChunkIntervalRef.current = setInterval(() => {
+                if (!socket.connected || audioSampleBufferRef.current.length === 0) {
+                  return;
+                }
+
+                const wavBlob = encodeWavChunk(audioSampleBufferRef.current, audioContext.sampleRate);
+                audioSampleBufferRef.current = [];
+
+                if (!wavBlob) {
+                  return;
+                }
+
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  if (!socket.connected || !reader.result) {
+                    return;
+                  }
+
+                  socket.emit('proctoring:audio', {
+                    studentId: studentData.studentId,
+                    studentName: studentData.studentName,
+                    testId: studentData.testId,
+                    testTitle: studentData.testTitle,
+                    audioDataUrl: reader.result,
+                    timestamp: Date.now()
+                  });
+                };
+                reader.readAsDataURL(wavBlob);
+              }, 2000);
+
+              console.log('[Proctoring] ✅ WAV audio chunk streaming started');
+            } catch (audioStreamErr) {
+              console.error('[Proctoring] Audio chunk streaming setup failed:', audioStreamErr);
+            }
           } catch (audioErr) {
             console.error('[Proctoring] Audio analysis setup failed:', audioErr);
           }
@@ -458,7 +562,7 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
             ctx.drawImage(videoRef.current, 0, 0, 640, 480);
             detectBlur(canvasRef.current, ctx);
           }
-        }, 5000); // Check blur every 5 seconds
+        }, 8000); // Check blur less frequently to reduce main-thread pressure
         
         // Capture and send frames
         frameIntervalRef.current = setInterval(() => {
@@ -558,6 +662,24 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
       clearInterval(voiceAnalysisIntervalRef.current);
       voiceAnalysisIntervalRef.current = null;
     }
+
+    if (audioChunkIntervalRef.current) {
+      clearInterval(audioChunkIntervalRef.current);
+      audioChunkIntervalRef.current = null;
+    }
+
+    if (audioProcessorRef.current) {
+      audioProcessorRef.current.disconnect();
+      audioProcessorRef.current.onaudioprocess = null;
+      audioProcessorRef.current = null;
+    }
+
+    if (silentGainRef.current) {
+      silentGainRef.current.disconnect();
+      silentGainRef.current = null;
+    }
+
+    audioSampleBufferRef.current = [];
     
     if (blurDetectionIntervalRef.current) {
       clearInterval(blurDetectionIntervalRef.current);

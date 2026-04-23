@@ -27,6 +27,18 @@ const StudentSupportChatbot = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showToastNotification, setShowToastNotification] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
+  
+  // Feedback state
+  const [feedbackState, setFeedbackState] = useState({
+    active: false,
+    step: null, // 'rating', 'helpful', 'responseTime', 'comments', 'complete'
+    data: {
+      rating: null,
+      helpful: null,
+      responseTime: null,
+      comments: null
+    }
+  });
 
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -91,6 +103,9 @@ const StudentSupportChatbot = () => {
     if (!socket) return;
 
     const handleAdminReply = (data) => {
+      console.log('[StudentChatbot] Admin reply received:', data);
+      console.log('[StudentChatbot] Chat open:', isOpenRef.current, 'Current view:', currentViewRef.current);
+      
       setConversationHistory(prev => {
         if (prev.find(m => m.id === data.id)) return prev;
         return [...prev, {
@@ -104,21 +119,101 @@ const StudentSupportChatbot = () => {
 
       // If contact view is open, mark as read immediately; otherwise bump unread count
       if (isOpenRef.current && currentViewRef.current === 'contact') {
+        console.log('[StudentChatbot] Chat is open, marking as read immediately');
         markMessagesAsRead();
       } else {
+        console.log('[StudentChatbot] Chat is closed, incrementing unread count');
         setUnreadCount(prev => prev + 1);
       }
     };
 
+    // Handle student's own message echo (for real-time display)
+    const handleStudentMessageEcho = (data) => {
+      console.log('[StudentChatbot] Own message echo:', data);
+      if (data.studentId === studentId) {
+        setConversationHistory(prev => {
+          // Check if message already exists
+          if (prev.find(m => m.id === data.id)) return prev;
+          return [...prev, {
+            id: data.id,
+            message: data.messagePreview,
+            sender_type: 'student',
+            created_at: data.createdAt,
+            image_path: data.imagePath || null
+          }];
+        });
+      }
+    };
+
+    // Handle conversation closed event - Start feedback in chat
+    const handleConversationClosed = (data) => {
+      console.log('[StudentChatbot] Conversation closed event received:', data);
+      console.log('[StudentChatbot] Current studentId:', studentId);
+      console.log('[StudentChatbot] Data studentId:', data.studentId);
+      console.log('[StudentChatbot] Request feedback:', data.requestFeedback);
+      console.log('[StudentChatbot] Current view:', currentViewRef.current);
+      console.log('[StudentChatbot] Is open:', isOpenRef.current);
+      
+      if (data.requestFeedback && data.studentId === studentId) {
+        console.log('[StudentChatbot] Activating feedback mode...');
+        
+        // Activate feedback mode
+        setFeedbackState({
+          active: true,
+          step: 'rating',
+          data: { rating: null, helpful: null, responseTime: null, comments: null }
+        });
+        
+        // Add feedback questions as chat messages
+        setTimeout(() => {
+          console.log('[StudentChatbot] Adding feedback messages to conversation...');
+          setConversationHistory(prev => {
+            const newMessages = [...prev, {
+              id: `feedback-start-${Date.now()}`,
+              message: "Thank you for contacting support! 🎉\n\nYour conversation has been closed. We'd love to hear your feedback to help us improve our service.\n\nLet's start with a simple question:",
+              sender_type: 'system',
+              created_at: new Date().toISOString(),
+              image_path: null
+            }, {
+              id: `feedback-q1-${Date.now()}`,
+              message: "How would you rate your support experience?\n\nReply with:\n⭐ 1 - Poor\n⭐⭐ 2 - Fair\n⭐⭐⭐ 3 - Good\n⭐⭐⭐⭐ 4 - Very Good\n⭐⭐⭐⭐⭐ 5 - Excellent",
+              sender_type: 'system',
+              created_at: new Date().toISOString(),
+              image_path: null,
+              feedbackStep: 'rating'
+            }];
+            console.log('[StudentChatbot] New conversation history length:', newMessages.length);
+            return newMessages;
+          });
+        }, 500);
+      } else {
+        console.log('[StudentChatbot] Feedback not triggered - conditions not met');
+      }
+    };
+
     socket.on('support:new-admin-reply', handleAdminReply);
-    return () => socket.off('support:new-admin-reply', handleAdminReply);
-  }, [getSocket, markMessagesAsRead]);
+    socket.on('support:student-message-echo', handleStudentMessageEcho);
+    socket.on('support:conversation-closed', handleConversationClosed);
+    
+    return () => {
+      socket.off('support:new-admin-reply', handleAdminReply);
+      socket.off('support:student-message-echo', handleStudentMessageEcho);
+      socket.off('support:conversation-closed', handleConversationClosed);
+    };
+  }, [getSocket, markMessagesAsRead, studentId]);
 
   // Debug: Log socket connection status
   useEffect(() => {
     console.log('[StudentChatbot] Socket connection status:', isConnected);
     console.log('[StudentChatbot] Student ID (rollNumber):', studentId);
-  }, [isConnected, studentId]);
+    
+    // Debug: Log socket rooms
+    const socket = getSocket();
+    if (socket && socket.connected) {
+      console.log('[StudentChatbot] Socket ID:', socket.id);
+      console.log('[StudentChatbot] Socket rooms:', Array.from(socket.rooms || []));
+    }
+  }, [isConnected, studentId, getSocket]);
 
   // Request notification permission on first user interaction
   useEffect(() => {
@@ -242,6 +337,8 @@ const StudentSupportChatbot = () => {
     if (topic.id === 'contact') {
       setCurrentView('contact');
       fetchConversationHistory();
+      // Also clear the unread count immediately for better UX
+      setUnreadCount(0);
       // Mark admin replies as read when opening support chat
       markMessagesAsRead();
     } else {
@@ -309,6 +406,12 @@ const StudentSupportChatbot = () => {
       return;
     }
 
+    // Check if we're in feedback mode
+    if (feedbackState.active) {
+      handleFeedbackResponse(newMessage.trim());
+      return;
+    }
+
     setIsSending(true);
     setSendStatus(null);
 
@@ -326,6 +429,12 @@ const StudentSupportChatbot = () => {
         formData.append('image', selectedImage);
       }
 
+      // Clear message immediately for better UX
+      const messageCopy = newMessage.trim();
+      const imageCopy = selectedImage;
+      setNewMessage('');
+      removeImage();
+
       const response = await fetch(`${API_URL}/api/student-messages`, {
         method: 'POST',
         headers: {
@@ -338,16 +447,17 @@ const StudentSupportChatbot = () => {
 
       if (data.success) {
         setSendStatus('success');
-        // Add message to conversation history locally
-        setConversationHistory(prev => [...prev, {
-          id: data.data.id,
-          message: newMessage.trim(),
-          image_path: data.data.imagePath || null,
-          sender_type: 'student',
-          created_at: new Date().toISOString()
-        }]);
-        setNewMessage('');
-        removeImage();
+        // Add message immediately after API confirm; socket echo will be deduped by id check
+        setConversationHistory(prev => {
+          if (prev.find(m => m.id === data.data?.id)) return prev;
+          return [...prev, {
+            id: data.data?.id,
+            message: messageCopy,
+            sender_type: 'student',
+            created_at: data.data?.createdAt || new Date().toISOString(),
+            image_path: data.data?.imagePath || null
+          }];
+        });
       } else {
         throw new Error(data.message || 'Failed to send message');
       }
@@ -356,6 +466,200 @@ const StudentSupportChatbot = () => {
       setSendStatus('error');
     } finally {
       setIsSending(false);
+    }
+  };
+
+  // Handle feedback responses in chat
+  const handleFeedbackResponse = async (response) => {
+    console.log('[StudentChatbot] Handling feedback response:', response);
+    console.log('[StudentChatbot] Current feedback state:', feedbackState);
+    
+    const { step, data } = feedbackState;
+
+    // Add user response to chat
+    setConversationHistory(prev => [...prev, {
+      id: `feedback-response-${Date.now()}`,
+      message: response,
+      sender_type: 'student',
+      created_at: new Date().toISOString()
+    }]);
+
+    setNewMessage('');
+
+    if (step === 'rating') {
+      // Parse rating (1-5)
+      const rating = parseInt(response);
+      console.log('[StudentChatbot] Parsed rating:', rating);
+      
+      if (rating >= 1 && rating <= 5) {
+        setFeedbackState(prev => ({
+          ...prev,
+          step: 'helpful',
+          data: { ...prev.data, rating }
+        }));
+        
+        // Ask next question
+        setTimeout(() => {
+          setConversationHistory(prev => [...prev, {
+            id: `feedback-q2-${Date.now()}`,
+            message: "Great! Was the admin's help useful to you?\n\nReply with:\n👍 Yes\n👎 No",
+            sender_type: 'system',
+            created_at: new Date().toISOString(),
+            feedbackStep: 'helpful'
+          }]);
+        }, 500);
+      } else {
+        setConversationHistory(prev => [...prev, {
+          id: `feedback-error-${Date.now()}`,
+          message: "Please reply with a number between 1 and 5 ⭐",
+          sender_type: 'system',
+          created_at: new Date().toISOString()
+        }]);
+      }
+    } else if (step === 'helpful') {
+      const helpful = response.toLowerCase().includes('yes') || response.includes('👍');
+      console.log('[StudentChatbot] Helpful response:', helpful);
+      
+      setFeedbackState(prev => ({
+        ...prev,
+        step: 'responseTime',
+        data: { ...prev.data, helpful }
+      }));
+      
+      setTimeout(() => {
+        setConversationHistory(prev => [...prev, {
+          id: `feedback-q3-${Date.now()}`,
+          message: "How was the response time?\n\nReply with:\n1️⃣ Very Fast\n2️⃣ Fast\n3️⃣ Average\n4️⃣ Slow\n5️⃣ Very Slow",
+          sender_type: 'system',
+          created_at: new Date().toISOString(),
+          feedbackStep: 'responseTime'
+        }]);
+      }, 500);
+    } else if (step === 'responseTime') {
+      const timeMap = {
+        '1': 'very_fast',
+        '2': 'fast',
+        '3': 'average',
+        '4': 'slow',
+        '5': 'very_slow',
+        'very fast': 'very_fast',
+        'fast': 'fast',
+        'average': 'average',
+        'slow': 'slow',
+        'very slow': 'very_slow'
+      };
+      
+      const responseTime = timeMap[response.toLowerCase()] || timeMap[response];
+      console.log('[StudentChatbot] Response time:', responseTime);
+      
+      if (responseTime) {
+        setFeedbackState(prev => ({
+          ...prev,
+          step: 'comments',
+          data: { ...prev.data, responseTime }
+        }));
+        
+        setTimeout(() => {
+          setConversationHistory(prev => [...prev, {
+            id: `feedback-q4-${Date.now()}`,
+            message: "Almost done! 🎉\n\nAny additional comments or suggestions?\n\n(Type 'skip' if you don't want to add comments)",
+            sender_type: 'system',
+            created_at: new Date().toISOString(),
+            feedbackStep: 'comments'
+          }]);
+        }, 500);
+      } else {
+        setConversationHistory(prev => [...prev, {
+          id: `feedback-error-${Date.now()}`,
+          message: "Please reply with a number between 1 and 5",
+          sender_type: 'system',
+          created_at: new Date().toISOString()
+        }]);
+      }
+    } else if (step === 'comments') {
+      const comments = response.toLowerCase() === 'skip' ? '' : response;
+      console.log('[StudentChatbot] Comments:', comments);
+      
+      // Submit feedback
+      const finalData = {
+        ...feedbackState.data,
+        comments
+      };
+      
+      console.log('[StudentChatbot] Submitting feedback:', finalData);
+      
+      try {
+        const token = localStorage.getItem('studentAuthToken');
+        const submitResponse = await fetch(
+          `${API_URL}/api/student-messages/conversation/${encodeURIComponent(studentId)}/feedback`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(finalData)
+          }
+        );
+
+        const result = await submitResponse.json();
+        console.log('[StudentChatbot] Feedback submission result:', result);
+        
+        if (result.success) {
+          setConversationHistory(prev => [...prev, {
+            id: `feedback-complete-${Date.now()}`,
+            message: "Thank you so much for your feedback! 🙏\n\nYour input helps us improve our support service. Have a great day! ✨",
+            sender_type: 'system',
+            created_at: new Date().toISOString()
+          }]);
+          
+          setFeedbackState({
+            active: false,
+            step: null,
+            data: { rating: null, helpful: null, responseTime: null, comments: null }
+          });
+        } else {
+          throw new Error(result.message);
+        }
+      } catch (error) {
+        console.error('[StudentChatbot] Error submitting feedback:', error);
+        setConversationHistory(prev => [...prev, {
+          id: `feedback-error-${Date.now()}`,
+          message: "Sorry, there was an error submitting your feedback. Please try again later.",
+          sender_type: 'system',
+          created_at: new Date().toISOString()
+        }]);
+      }
+    }
+  };
+
+  // Handle feedback submission
+  const handleFeedbackSubmit = async (feedback) => {
+    try {
+      const token = localStorage.getItem('studentAuthToken');
+      const response = await fetch(
+        `${API_URL}/api/student-messages/conversation/${encodeURIComponent(studentId)}/feedback`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(feedback)
+        }
+      );
+
+      const data = await response.json();
+      if (data.success) {
+        alert('Thank you for your feedback!');
+        setShowFeedbackModal(false);
+        setFeedbackData(null);
+      } else {
+        throw new Error(data.message || 'Failed to submit feedback');
+      }
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      throw error;
     }
   };
 
@@ -489,6 +793,7 @@ const StudentSupportChatbot = () => {
           <>
             {conversationHistory.map((msg, index) => {
               const isStudent = msg.sender_type === 'student';
+              const isSystem = msg.sender_type === 'system';
               const showDate = index === 0 ||
                 formatDate(msg.created_at) !== formatDate(conversationHistory[index - 1].created_at);
 
@@ -501,16 +806,19 @@ const StudentSupportChatbot = () => {
                       </span>
                     </div>
                   )}
-                  <div className={`flex ${isStudent ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] ${isStudent ? 'order-2' : 'order-1'}`}>
-                      {!isStudent && (
+                  <div className={`flex ${isStudent ? 'justify-end' : isSystem ? 'justify-center' : 'justify-start'}`}>
+                    <div className={`${isSystem ? 'w-full' : 'max-w-[85%]'} ${isStudent ? 'order-2' : 'order-1'}`}>
+                      {!isStudent && !isSystem && (
                         <p className="text-xs text-shnoor-indigo font-medium mb-1 ml-1">Admin</p>
                       )}
                       <div
-                        className={`p-3 rounded-xl text-sm ${isStudent
+                        className={`p-3 rounded-xl text-sm ${
+                          isSystem
+                            ? 'bg-yellow-50 border border-yellow-200 text-gray-800'
+                            : isStudent
                             ? 'bg-shnoor-indigo text-white rounded-tr-none'
                             : 'bg-shnoor-lavender text-shnoor-navy rounded-tl-none'
-                          }`}
+                        }`}
                       >
                         <p className="whitespace-pre-wrap">{msg.message}</p>
                         {msg.image_path && (
@@ -522,9 +830,11 @@ const StudentSupportChatbot = () => {
                           />
                         )}
                       </div>
-                      <p className={`text-xs text-shnoor-soft mt-1 ${isStudent ? 'text-right mr-1' : 'ml-1'}`}>
-                        {formatTime(msg.created_at)}
-                      </p>
+                      {!isSystem && (
+                        <p className={`text-xs text-shnoor-soft mt-1 ${isStudent ? 'text-right mr-1' : 'ml-1'}`}>
+                          {formatTime(msg.created_at)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -8,13 +8,17 @@ const AIViolationAlert = ({ violation, onDismiss }) => {
       case 'no_face':
         return <UserX className="w-6 h-6" />;
       case 'phone_detected':
+      case 'object_detected':
       case 'looking_down':
         return <Smartphone className="w-6 h-6" />;
       case 'loud_noise':
+      case 'noise_detected':
       case 'voice_detected':
         return <Volume2 className="w-6 h-6" />;
       case 'video_blur':
         return <VideoOff className="w-6 h-6" />;
+      case 'tab_switch':
+        return <Eye className="w-6 h-6" />;
       default:
         return <Eye className="w-6 h-6" />;
     }
@@ -41,14 +45,19 @@ const AIViolationAlert = ({ violation, onDismiss }) => {
         return 'No face detected';
       case 'phone_detected':
         return 'Mobile detected';
+      case 'object_detected':
+        return 'Object detected';
       case 'looking_down':
         return 'Looking down detected';
       case 'loud_noise':
+      case 'noise_detected':
         return 'Sound detected';
       case 'voice_detected':
         return 'Sound detected';
       case 'video_blur':
         return 'Blur video';
+      case 'tab_switch':
+        return 'Tab switch detected';
       default:
         return 'Suspicious activity detected';
     }

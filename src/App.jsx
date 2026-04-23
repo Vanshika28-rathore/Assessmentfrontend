@@ -37,6 +37,7 @@ const TermsAndConditions = React.lazy(() => import('./pages/TermsAndConditions')
 const JobBoard = React.lazy(() => import('./pages/JobBoard'));
 const MyApplications = React.lazy(() => import('./pages/MyApplications'));
 const AIInterviewPage = React.lazy(() => import('./pages/AIInterviewPage'));
+const AIInterviewResults = React.lazy(() => import('./pages/admin/AIInterviewResults'));
 
 // Protected Route wrappers
 const StudentRoute = ({ children }) => {
@@ -88,6 +89,7 @@ function App() {
               <Route path="/admin/job-applicants/:jobId" element={<AdminProtectedRoute><AdminJobApplicants /></AdminProtectedRoute>} />
               <Route path="/admin/interviews" element={<AdminProtectedRoute><InterviewsList /></AdminProtectedRoute>} />
               <Route path="/admin/interview-room/:interviewId" element={<AdminProtectedRoute><InterviewRoom /></AdminProtectedRoute>} />
+              <Route path="/admin/ai-interview-results" element={<AdminProtectedRoute><AIInterviewResults /></AdminProtectedRoute>} />
 
               {/* Student Interview Route */}
               <Route path="/interview-room/:interviewId" element={<StudentRoute><InterviewRoom /></StudentRoute>} />
