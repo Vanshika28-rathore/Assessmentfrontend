@@ -9,8 +9,9 @@ const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const LiveProctoring = () => {
   const navigate = useNavigate();
   const [activeSessions, setActiveSessions] = useState([]);
+  const [sessionMode, setSessionMode] = useState('exam');
   const [isConnected, setIsConnected] = useState(false);
-  const [frameData, setFrameData] = useState(new Map()); // studentId -> frame base64
+  const [frameData, setFrameData] = useState(new Map()); // studentId -> { frame, aiViolations }
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isStopModalOpen, setIsStopModalOpen] = useState(false);
@@ -90,6 +91,16 @@ const LiveProctoring = () => {
   useEffect(() => {
     enabledMicStudentsRef.current = enabledMicStudents;
   }, [enabledMicStudents]);
+
+  const isAIInterviewSession = (session) => {
+    return Number(session?.testId) === -1 || String(session?.testTitle || '').toLowerCase().includes('ai interview');
+  };
+
+  const filteredSessions = activeSessions.filter((session) => {
+    if (sessionMode === 'ai') return isAIInterviewSession(session);
+    if (sessionMode === 'exam') return !isAIInterviewSession(session);
+    return true;
+  });
 
 
   useEffect(() => {
@@ -198,13 +209,16 @@ const LiveProctoring = () => {
 
     // Receive video frames from students
     socket.on('proctoring:frame', (data) => {
-      const { studentId, frame } = data;
+      const { studentId, frame, aiViolations } = data;
 
       // Update frame data for this student
       setFrameData(prev => {
         const newMap = new Map(prev);
         // Ensure studentId is a string for consistent key matching
-        newMap.set(String(studentId), frame);
+        newMap.set(String(studentId), {
+          frame,
+          aiViolations: aiViolations || null,
+        });
         return newMap;
       });
     });
@@ -365,7 +379,7 @@ const LiveProctoring = () => {
               </div>
               <div className="flex items-center space-x-2 px-3 py-1.5 bg-white/10 rounded-lg">
                 <Users size={16} />
-                <span className="text-sm font-medium">{activeSessions.length} Active</span>
+                <span className="text-sm font-medium">{filteredSessions.length} Active</span>
               </div>
             </div>
           </div>
@@ -374,20 +388,44 @@ const LiveProctoring = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeSessions.length === 0 ? (
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setSessionMode('exam')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${sessionMode === 'exam' ? 'bg-shnoor-navy text-white border-shnoor-navy' : 'bg-white text-shnoor-indigoMedium border-shnoor-light hover:bg-shnoor-lavender'}`}
+          >
+            Exam Proctoring
+          </button>
+          <button
+            onClick={() => setSessionMode('ai')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${sessionMode === 'ai' ? 'bg-shnoor-navy text-white border-shnoor-navy' : 'bg-white text-shnoor-indigoMedium border-shnoor-light hover:bg-shnoor-lavender'}`}
+          >
+            AI Interview Proctoring
+          </button>
+          <button
+            onClick={() => setSessionMode('all')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${sessionMode === 'all' ? 'bg-shnoor-navy text-white border-shnoor-navy' : 'bg-white text-shnoor-indigoMedium border-shnoor-light hover:bg-shnoor-lavender'}`}
+          >
+            All
+          </button>
+        </div>
+
+        {filteredSessions.length === 0 ? (
           <div className="bg-white rounded-xl shadow-[0_8px_30px_rgba(14,14,39,0.06)] border border-shnoor-light p-12 text-center">
             <Camera size={64} className="mx-auto text-shnoor-light mb-4" />
             <h2 className="text-xl font-bold text-shnoor-navy mb-2">No Active Sessions</h2>
             <p className="text-shnoor-indigoMedium">
-              Students taking exams with proctoring enabled will appear here
+              {sessionMode === 'ai' ? 'Students in AI interviews will appear here' : sessionMode === 'exam' ? 'Students taking exams with proctoring enabled will appear here' : 'Students with active proctoring sessions will appear here'}
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {activeSessions.map((session) => {
+            {filteredSessions.map((session) => {
               // Ensure consistent string key for lookup
               const sessionKey = String(session.studentId);
-              const currentFrame = frameData.get(sessionKey);
+              const currentFramePayload = frameData.get(sessionKey);
+              const currentFrame = currentFramePayload?.frame;
+              const aiViolations = currentFramePayload?.aiViolations || {};
+              const showAICounts = isAIInterviewSession(session);
 
               return (
                 <div
@@ -447,6 +485,12 @@ const LiveProctoring = () => {
                       </div>
                     </div>
 
+                    {showAICounts && (
+                      <div className="mt-3 p-2 rounded-lg bg-shnoor-warningLight border border-shnoor-warning/50 text-[11px] text-shnoor-navy">
+                        Faces: {aiViolations.multipleFaces || 0} | No face: {aiViolations.noFace || 0} | Phone: {aiViolations.phoneDetected || 0} | Object: {aiViolations.objectDetected || 0} | Voice: {aiViolations.voiceDetected || 0} | Tab: {aiViolations.tabSwitch || 0}
+                      </div>
+                    )}
+
                     {/* Chat Button */}
                     <div className="mt-4 pt-3 border-t border-shnoor-light">
                       <div className="flex items-center gap-2">
@@ -471,15 +515,17 @@ const LiveProctoring = () => {
                     </div>
 
                     {/* Stop Test Button */}
-                    <div className="mt-3">
-                      <button
-                        onClick={() => handleOpenStopModal(session)}
-                        className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                      >
-                        <StopCircle size={16} />
-                        <span className="text-sm font-medium">Stop Test</span>
-                      </button>
-                    </div>
+                    {!showAICounts && (
+                      <div className="mt-3">
+                        <button
+                          onClick={() => handleOpenStopModal(session)}
+                          className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                        >
+                          <StopCircle size={16} />
+                          <span className="text-sm font-medium">Stop Test</span>
+                        </button>
+                      </div>
+                    )}
 
                   </div>
                 </div>

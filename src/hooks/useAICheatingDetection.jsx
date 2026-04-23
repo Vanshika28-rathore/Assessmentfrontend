@@ -23,8 +23,9 @@ export const useAICheatingDetection = (onViolation) => {
 
   // Configuration
   const DETECTION_INTERVAL = 600;
-  const NO_FACE_THRESHOLD = 900;
-  const VIOLATION_COOLDOWN = 1800;
+  const NO_FACE_THRESHOLD = 1200;
+  const VIOLATION_COOLDOWN = 3000;
+  const FACE_CONFIDENCE_THRESHOLD = 0.5;
 
   // Load MediaPipe models with retry logic
   const loadModels = useCallback(async () => {
@@ -111,7 +112,7 @@ export const useAICheatingDetection = (onViolation) => {
   const detectMultipleFaces = useCallback((detections) => {
     const validFaceDetections = (detections.detections || []).filter((det) => {
       const score = det?.categories?.[0]?.score || 0;
-      return score >= 0.45;
+      return score >= FACE_CONFIDENCE_THRESHOLD;
     });
     const faceCount = validFaceDetections.length;
     
@@ -122,7 +123,7 @@ export const useAICheatingDetection = (onViolation) => {
     
     if (faceCount > 1) {
       multipleFaceStreakRef.current += 1;
-      if (multipleFaceStreakRef.current < 1) {
+      if (multipleFaceStreakRef.current < 2) {
         return null;
       }
 
@@ -152,7 +153,7 @@ export const useAICheatingDetection = (onViolation) => {
   const detectNoFace = useCallback((detections) => {
     const faceCount = (detections.detections || []).filter((det) => {
       const score = det?.categories?.[0]?.score || 0;
-      return score >= 0.45;
+      return score >= FACE_CONFIDENCE_THRESHOLD;
     }).length;
     
     if (faceCount === 0) {
@@ -198,7 +199,7 @@ export const useAICheatingDetection = (onViolation) => {
     }
 
     return null;
-  }, []);
+  }, [FACE_CONFIDENCE_THRESHOLD]);
 
   const detectPhone = useCallback((objectDetections) => {
     if (!objectDetections || !objectDetections.detections) return null;

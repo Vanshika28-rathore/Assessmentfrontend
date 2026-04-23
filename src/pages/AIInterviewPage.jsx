@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Upload, Send, Bot, User, Loader2, FileText, RefreshCw, ChevronLeft, Mic, Volume2, VolumeX, Camera, ShieldAlert } from 'lucide-react';
+import { Upload, Send, Bot, User, Loader2, FileText, RefreshCw, ChevronLeft, Mic, Volume2, VolumeX, Camera, ShieldAlert } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { API_URL } from '../config/api';
 import shnoorLogo from '../assets/shnoor-logo.png';
@@ -40,6 +40,7 @@ const AIInterviewPage = () => {
     phoneDetected: 0,
     objectDetected: 0,
     voiceDetected: 0,
+    tabSwitch: 0,
   });
 
   const messagesEndRef = useRef(null);
@@ -53,10 +54,16 @@ const AIInterviewPage = () => {
   const frameIntervalRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
+  const audioProcessorRef = useRef(null);
+  const silentGainRef = useRef(null);
+  const audioChunkIntervalRef = useRef(null);
+  const audioSampleBufferRef = useRef([]);
   const audioMonitorIntervalRef = useRef(null);
   const cameraHealthIntervalRef = useRef(null);
   const lastCameraAlertRef = useRef(0);
   const voiceStartRef = useRef(null);
+  const voiceStreakRef = useRef(0);
+  const ambientNoiseRef = useRef(0);
   const voiceCooldownRef = useRef(0);
   const violationTimeoutRef = useRef(null);
   const suppressAudioUntilRef = useRef(0);
@@ -66,6 +73,13 @@ const AIInterviewPage = () => {
   const speechDraftRef = useRef('');
   const keepListeningRef = useRef(false);
   const recognitionRunningRef = useRef(false);
+  const recognizedFinalRef = useRef('');
+  const proctoringCountsRef = useRef(proctoringCounts);
+  const currentViolationRef = useRef(currentViolation);
+  const lastTabViolationRef = useRef(0);
+  const isListeningRef = useRef(false);
+  const isSendingRef = useRef(false);
+  const isVoiceModeRef = useRef(false);
 
   const { showWarning, setShowWarning, enterFullscreen } = useFullscreen();
 
@@ -86,8 +100,8 @@ const AIInterviewPage = () => {
 
     // Do not allow noisy sound alerts to replace more important violations.
     if (isSoundViolation) {
-      if (isListening || isSending || isVoiceMode || now < suppressAudioUntilRef.current) return;
-      if (currentViolation && currentViolation.type !== 'voice_detected') return;
+      if (isListeningRef.current || isSendingRef.current || isVoiceModeRef.current || now < suppressAudioUntilRef.current) return;
+      if (currentViolationRef.current && currentViolationRef.current.type !== 'voice_detected') return;
       if (now - lastCriticalViolationAtRef.current < 2500) return;
     }
 
@@ -112,6 +126,8 @@ const AIInterviewPage = () => {
       setProctoringCounts((prev) => ({ ...prev, phoneDetected: prev.phoneDetected + 1 }));
     } else if (violation.type === 'object_detected') {
       setProctoringCounts((prev) => ({ ...prev, objectDetected: prev.objectDetected + 1 }));
+    } else if (violation.type === 'tab_switch') {
+      setProctoringCounts((prev) => ({ ...prev, tabSwitch: prev.tabSwitch + 1 }));
     }
 
     if (socketRef.current?.connected) {
@@ -124,14 +140,74 @@ const AIInterviewPage = () => {
     }
   }, [
     proctoringMeta.studentId,
-    proctoringMeta.testId,
-    currentViolation,
-    isListening,
-    isSending,
-    isVoiceMode
+    proctoringMeta.testId
   ]);
 
+  useEffect(() => {
+    proctoringCountsRef.current = proctoringCounts;
+  }, [proctoringCounts]);
+
+  useEffect(() => {
+    currentViolationRef.current = currentViolation;
+  }, [currentViolation]);
+
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
+  useEffect(() => {
+    isSendingRef.current = isSending;
+  }, [isSending]);
+
+  useEffect(() => {
+    isVoiceModeRef.current = isVoiceMode;
+  }, [isVoiceMode]);
+
   const { startDetection, stopDetection } = useAICheatingDetection(handleViolation);
+
+  const encodeWavChunk = useCallback((sampleChunks, sampleRate) => {
+    const totalLength = sampleChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    if (totalLength === 0) return null;
+
+    const mergedSamples = new Float32Array(totalLength);
+    let offset = 0;
+    sampleChunks.forEach((chunk) => {
+      mergedSamples.set(chunk, offset);
+      offset += chunk.length;
+    });
+
+    const buffer = new ArrayBuffer(44 + mergedSamples.length * 2);
+    const view = new DataView(buffer);
+
+    const writeString = (viewRef, writeOffset, text) => {
+      for (let index = 0; index < text.length; index += 1) {
+        viewRef.setUint8(writeOffset + index, text.charCodeAt(index));
+      }
+    };
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + mergedSamples.length * 2, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, mergedSamples.length * 2, true);
+
+    let pcmOffset = 44;
+    mergedSamples.forEach((sample) => {
+      const normalizedSample = Math.max(-1, Math.min(1, sample));
+      view.setInt16(pcmOffset, normalizedSample < 0 ? normalizedSample * 0x8000 : normalizedSample * 0x7fff, true);
+      pcmOffset += 2;
+    });
+
+    return new Blob([view], { type: 'audio/wav' });
+  }, []);
 
   const normalizeTranscript = useCallback((text = '') => {
     return text
@@ -151,13 +227,17 @@ const AIInterviewPage = () => {
       recognition.lang = 'en-US';
 
       recognition.onresult = (event) => {
-        let transcript = '';
-        for (let i = 0; i < event.results.length; i += 1) {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
           const chunk = event.results[i]?.[0]?.transcript || '';
-          transcript += ` ${chunk}`;
+          if (event.results[i].isFinal) {
+            recognizedFinalRef.current = `${recognizedFinalRef.current} ${chunk}`;
+          } else {
+            interim += ` ${chunk}`;
+          }
         }
 
-        const normalized = normalizeTranscript(transcript);
+        const normalized = normalizeTranscript(`${recognizedFinalRef.current} ${interim}`);
         if (normalized) {
           speechDraftRef.current = normalized;
           setUserInput(normalized);
@@ -173,6 +253,7 @@ const AIInterviewPage = () => {
       };
 
       recognition.onstart = () => {
+        recognizedFinalRef.current = speechDraftRef.current || '';
         recognitionRunningRef.current = true;
       };
 
@@ -208,6 +289,11 @@ const AIInterviewPage = () => {
       audioMonitorIntervalRef.current = null;
     }
 
+    if (audioChunkIntervalRef.current) {
+      clearInterval(audioChunkIntervalRef.current);
+      audioChunkIntervalRef.current = null;
+    }
+
     if (cameraHealthIntervalRef.current) {
       clearInterval(cameraHealthIntervalRef.current);
       cameraHealthIntervalRef.current = null;
@@ -224,6 +310,19 @@ const AIInterviewPage = () => {
       audioContextRef.current = null;
       analyserRef.current = null;
     }
+
+    if (audioProcessorRef.current) {
+      audioProcessorRef.current.disconnect();
+      audioProcessorRef.current.onaudioprocess = null;
+      audioProcessorRef.current = null;
+    }
+
+    if (silentGainRef.current) {
+      silentGainRef.current.disconnect();
+      silentGainRef.current = null;
+    }
+
+    audioSampleBufferRef.current = [];
 
     if (socketRef.current) {
       socketRef.current.emit('student:leave-proctoring', proctoringMeta);
@@ -261,13 +360,13 @@ const AIInterviewPage = () => {
           ...proctoringMeta,
           frame,
           timestamp: Date.now(),
-          aiViolations: proctoringCounts,
+          aiViolations: proctoringCountsRef.current,
         });
       } catch (error) {
         console.error('Frame relay error:', error);
       }
     }, 1500);
-  }, [proctoringMeta, proctoringCounts]);
+  }, [proctoringMeta]);
 
   const startAudioMonitoring = useCallback(async () => {
     if (!streamRef.current || audioMonitorIntervalRef.current) return;
@@ -283,6 +382,51 @@ const AIInterviewPage = () => {
       audioContextRef.current = audioContext;
       analyserRef.current = analyser;
 
+      // Stream student audio chunks for admin live proctoring listen mode.
+      try {
+        const processor = audioContext.createScriptProcessor(4096, 1, 1);
+        const silentGain = audioContext.createGain();
+        silentGain.gain.value = 0;
+
+        audioSampleBufferRef.current = [];
+        processor.onaudioprocess = (event) => {
+          const inputSamples = event.inputBuffer.getChannelData(0);
+          audioSampleBufferRef.current.push(new Float32Array(inputSamples));
+        };
+
+        source.connect(processor);
+        processor.connect(silentGain);
+        silentGain.connect(audioContext.destination);
+
+        audioProcessorRef.current = processor;
+        silentGainRef.current = silentGain;
+
+        audioChunkIntervalRef.current = setInterval(() => {
+          if (!socketRef.current?.connected || audioSampleBufferRef.current.length === 0) return;
+
+          const wavBlob = encodeWavChunk(audioSampleBufferRef.current, audioContext.sampleRate);
+          audioSampleBufferRef.current = [];
+          if (!wavBlob) return;
+
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (!socketRef.current?.connected || !reader.result) return;
+
+            socketRef.current.emit('proctoring:audio', {
+              studentId: proctoringMeta.studentId,
+              studentName: proctoringMeta.studentName,
+              testId: proctoringMeta.testId,
+              testTitle: proctoringMeta.testTitle,
+              audioDataUrl: reader.result,
+              timestamp: Date.now(),
+            });
+          };
+          reader.readAsDataURL(wavBlob);
+        }, 2000);
+      } catch (streamError) {
+        console.error('Audio relay setup error:', streamError);
+      }
+
       const freqData = new Uint8Array(analyser.frequencyBinCount);
 
       audioMonitorIntervalRef.current = setInterval(() => {
@@ -291,7 +435,8 @@ const AIInterviewPage = () => {
         const now = Date.now();
         // Ignore sound violations while candidate is intentionally speaking,
         // or immediately after AI TTS playback starts.
-        if (isListening || now < suppressAudioUntilRef.current) {
+        if (isListeningRef.current || isSendingRef.current || isVoiceModeRef.current || now < suppressAudioUntilRef.current) {
+          voiceStreakRef.current = 0;
           voiceStartRef.current = null;
           return;
         }
@@ -308,14 +453,28 @@ const AIInterviewPage = () => {
           ? voiceSlice.reduce((sum, value) => sum + value, 0) / voiceSlice.length
           : 0;
 
+        ambientNoiseRef.current = ambientNoiseRef.current
+          ? ambientNoiseRef.current * 0.92 + avgVolume * 0.08
+          : avgVolume;
+
+        const dynamicAvgThreshold = Math.max(11, ambientNoiseRef.current + 5.5);
+        const dynamicVoiceThreshold = Math.max(13, ambientNoiseRef.current + 7);
+        const dynamicPeakThreshold = Math.max(52, ambientNoiseRef.current * 3.3);
         const peakVolume = Math.max(...freqData);
-        if ((avgVolume > 6 && voiceEnergy > 7) || peakVolume > 38) {
+
+        const hasVoiceLikeSignal =
+          (avgVolume > dynamicAvgThreshold && voiceEnergy > dynamicVoiceThreshold) ||
+          peakVolume > dynamicPeakThreshold;
+
+        if (hasVoiceLikeSignal) {
+          voiceStreakRef.current += 1;
+
           if (!voiceStartRef.current) {
             voiceStartRef.current = now;
           }
 
           const voiceDuration = now - voiceStartRef.current;
-          if (voiceDuration > 420 && now - voiceCooldownRef.current > 4200) {
+          if (voiceStreakRef.current >= 3 && voiceDuration > 700 && now - voiceCooldownRef.current > 7000) {
             voiceCooldownRef.current = now;
             setProctoringCounts((prev) => ({ ...prev, voiceDetected: prev.voiceDetected + 1 }));
             handleViolation({
@@ -325,13 +484,14 @@ const AIInterviewPage = () => {
             });
           }
         } else {
+          voiceStreakRef.current = 0;
           voiceStartRef.current = null;
         }
-      }, 300);
+      }, 220);
     } catch (error) {
       console.error('Audio monitor error:', error);
     }
-  }, [handleViolation, isListening]);
+  }, [encodeWavChunk, handleViolation, proctoringMeta]);
 
   const ensureCameraAndMic = useCallback(async () => {
     if (streamRef.current && isCameraReady) {
@@ -412,14 +572,18 @@ const AIInterviewPage = () => {
   const toggleListening = () => {
     if (isListening) {
       keepListeningRef.current = false;
+      if (speechDraftRef.current) {
+        setUserInput(speechDraftRef.current);
+      }
       if (recognitionRunningRef.current) {
         recognitionRef.current?.stop();
       }
-      suppressAudioUntilRef.current = Date.now() + 1200;
+      suppressAudioUntilRef.current = Date.now() + 4500;
       setIsListening(false);
     } else {
       try {
         speechDraftRef.current = userInput;
+        recognizedFinalRef.current = userInput;
         keepListeningRef.current = true;
         if (!recognitionRunningRef.current) {
           recognitionRef.current?.start();
@@ -463,17 +627,15 @@ const AIInterviewPage = () => {
     } else if (timeLeft === 0) {
       clearInterval(timerRef.current);
       setTimerActive(false);
-      
-      const newCount = silenceCount + 1;
-      setSilenceCount(newCount);
 
-      if (newCount < 2) {
-        // First silence: Ask to repeat
-        handleSendAnswer("(Candidate is silent. Briefly repeat your previous question once more.)", true);
-      } else {
-        // Second silence: Move to next question
-        handleSendAnswer("(Candidate is still silent. Say 'Sorry you didn't provide an answer, let's move to the next question' and ask a brand new basic question from the resume.)", true);
-        setSilenceCount(0); // Reset for the new question
+      if (isVoiceMode) {
+        const newCount = silenceCount + 1;
+        setSilenceCount(newCount);
+        setCurrentViolation({
+          type: 'response_timeout',
+          severity: 'low',
+          message: 'No response detected. Please answer when ready.',
+        });
       }
     }
 
@@ -579,6 +741,9 @@ const AIInterviewPage = () => {
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
+        const now = Date.now();
+        if (now - lastTabViolationRef.current < 3500) return;
+        lastTabViolationRef.current = now;
         handleViolation({
           type: 'tab_switch',
           severity: 'medium',
@@ -613,14 +778,6 @@ const AIInterviewPage = () => {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  const handleLogout = () => {
-    stopProctoring(true);
-    recognitionRef.current?.stop();
-    window.speechSynthesis?.cancel();
-    localStorage.clear();
-    navigate('/login');
-  };
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -716,6 +873,18 @@ const AIInterviewPage = () => {
     const textToSend = (overrideText || userInput).trim();
     if (!textToSend || isSending) return;
 
+    if (isListening) {
+      keepListeningRef.current = false;
+      if (speechDraftRef.current) {
+        setUserInput(speechDraftRef.current);
+      }
+      if (recognitionRunningRef.current) {
+        recognitionRef.current?.stop();
+      }
+      suppressAudioUntilRef.current = Date.now() + 4500;
+      setIsListening(false);
+    }
+
     const now = Date.now();
     if (lastSentRef.current.text === textToSend && now - lastSentRef.current.at < 1500) {
       return;
@@ -801,7 +970,10 @@ const AIInterviewPage = () => {
     setChatError('');
     setIsListening(false);
     setCurrentViolation(null);
-    setProctoringCounts({ multipleFaces: 0, noFace: 0, phoneDetected: 0, objectDetected: 0, voiceDetected: 0 });
+    setProctoringCounts({ multipleFaces: 0, noFace: 0, phoneDetected: 0, objectDetected: 0, voiceDetected: 0, tabSwitch: 0 });
+    ambientNoiseRef.current = 0;
+    voiceStreakRef.current = 0;
+    voiceStartRef.current = null;
     recognitionRef.current?.stop();
     setTimerActive(false);
     setTimeLeft(10);
@@ -827,13 +999,12 @@ const AIInterviewPage = () => {
                 <img src={shnoorLogo} alt="Shnoor Logo" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="text-white font-bold text-base sm:text-lg leading-tight">AI Interview Practice</h1>
-                <p className="text-shnoor-light opacity-80 text-[10px] sm:text-xs">Powered by Local AI</p>
+                <h1 className="text-white font-bold text-base sm:text-lg leading-tight">AI Interview</h1>
               </div>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <span className="text-sm font-medium text-white hidden sm:block">{studentName}</span>
+            <div className="ml-auto flex items-center space-x-3">
+              <span className="text-sm font-medium text-white">{studentName}</span>
               {step === 'interview' && (
                 <button
                   onClick={handleRestartInterview}
@@ -843,13 +1014,6 @@ const AIInterviewPage = () => {
                   <span className="hidden sm:inline">Restart</span>
                 </button>
               )}
-              <button
-                onClick={handleLogout}
-                className="flex items-center space-x-2 px-3 sm:px-5 py-2 text-white bg-transparent border border-white/20 hover:bg-white/10 rounded-lg transition-colors text-xs sm:text-sm font-medium"
-              >
-                <LogOut size={14} />
-                <span className="hidden sm:inline">Logout</span>
-              </button>
             </div>
           </div>
         </div>
@@ -1016,8 +1180,8 @@ const AIInterviewPage = () => {
           <div className="flex flex-col flex-1 bg-theme-card rounded-2xl border border-theme-border shadow-[0_20px_60px_-15px_rgba(30,30,80,0.12)] overflow-hidden min-h-[calc(100vh-200px)] relative">
 
             <div className="px-4 py-2 bg-shnoor-warningLight border-b border-shnoor-warning/40 text-xs text-shnoor-navy font-medium flex items-center justify-between">
-              <span className="flex items-center gap-2"><ShieldAlert size={14} /> Live proctoring is active: camera + microphone monitoring enabled.</span>
-              <span>Faces: {proctoringCounts.multipleFaces} | No face: {proctoringCounts.noFace} | Phone: {proctoringCounts.phoneDetected} | Object: {proctoringCounts.objectDetected} | Voice: {proctoringCounts.voiceDetected}</span>
+              <span className="flex items-center gap-2"><ShieldAlert size={14} /> Proctoring active: camera and microphone enabled.</span>
+              <span>Faces: {proctoringCounts.multipleFaces} | No face: {proctoringCounts.noFace} | Phone: {proctoringCounts.phoneDetected} | Object: {proctoringCounts.objectDetected} | Voice: {proctoringCounts.voiceDetected} | Tab: {proctoringCounts.tabSwitch}</span>
             </div>
             
             {/* Listening Overlay Animation */}
@@ -1073,10 +1237,7 @@ const AIInterviewPage = () => {
                   {isTTSActive ? <Volume2 size={16} /> : <VolumeX size={16} />}
                   <span className="text-xs hidden sm:inline text-white/70">{isTTSActive ? "On" : "Off"}</span>
                 </button>
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                  <span className="text-white/70 text-xs font-medium">Live</span>
-                </div>
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
               </div>
             </div>
 
@@ -1132,7 +1293,7 @@ const AIInterviewPage = () => {
                 
                 <div className="mt-8 text-center bg-shnoor-navy/80 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/10 shadow-xl">
                   <p className="text-white font-bold text-lg">Voice Only Mode Active</p>
-                  <p className="text-white/60 text-xs">Interview is live • {timeLeft === 0 ? 'Moving to next question...' : 'Speak now'}</p>
+                  <p className="text-white/60 text-xs">{timeLeft === 0 ? 'No response detected' : 'Speak now'}</p>
                 </div>
               </div>
             )}

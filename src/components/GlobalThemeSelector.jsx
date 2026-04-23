@@ -19,8 +19,10 @@ const GlobalThemeSelector = () => {
     return null;
   }
 
+  const isAIInterview = location.pathname === '/ai-interview';
+
   return (
-    <div className="fixed right-4 top-[72px] sm:top-6 sm:right-6 z-[120]">
+    <div className={isAIInterview ? 'hidden sm:block fixed right-6 top-4 z-[120]' : 'fixed right-4 top-[72px] sm:top-6 sm:right-6 z-[120]'}>
       <ThemeSelector variant="light" />
     </div>
   );
