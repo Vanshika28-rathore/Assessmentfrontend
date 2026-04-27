@@ -450,7 +450,7 @@ const Dashboard = () => {
               onClick={() => navigate('/ai-interview')}
               className="flex items-center space-x-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-medium transition-all text-sm sm:text-base bg-white text-shnoor-indigoMedium hover:text-shnoor-navy hover:bg-shnoor-lavender"
             >
-              <Sparkles size={18} className="sm:w-5 sm:h-5 flex-shrink-0 text-shnoor-indigo" />
+              <Sparkles size={18} className="sm:w-5 sm:h-5 flex-shrink-0" />
               <span>AI Interview</span>
             </button>
             <button

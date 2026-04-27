@@ -31,6 +31,7 @@ const AdminSettings = React.lazy(() => import('./pages/admin/AdminSettings'));
 const AdminJobApplicants = React.lazy(() => import('./components/admin/AdminJobApplicants'));
 const InterviewsList = React.lazy(() => import('./pages/admin/InterviewsList'));
 const StudentMessages = React.lazy(() => import('./pages/admin/StudentMessages'));
+const AIInterviewResults = React.lazy(() => import('./pages/admin/AIInterviewResults'));
 const InterviewRoom = React.lazy(() => import('./pages/InterviewRoom'));
 const ServerDown = React.lazy(() => import('./pages/ServerDown'));
 const Maintenance = React.lazy(() => import('./pages/Maintenance'));
@@ -89,6 +90,7 @@ const AppRoutes = () => {
         <Route path="/admin/reports" element={<AdminProtectedRoute><AdminReports /></AdminProtectedRoute>} />
         <Route path="/admin/live-proctoring" element={<AdminProtectedRoute><LiveProctoring /></AdminProtectedRoute>} />
         <Route path="/admin/student-messages" element={<AdminProtectedRoute><StudentMessages /></AdminProtectedRoute>} />
+        <Route path="/admin/ai-interview-results" element={<AdminProtectedRoute><AIInterviewResults /></AdminProtectedRoute>} />
         <Route path="/admin/settings" element={<AdminProtectedRoute><AdminSettings /></AdminProtectedRoute>} />
         <Route path="/admin/job-applicants/:jobId" element={<AdminProtectedRoute><AdminJobApplicants /></AdminProtectedRoute>} />
         <Route path="/admin/interviews" element={<AdminProtectedRoute><InterviewsList /></AdminProtectedRoute>} />

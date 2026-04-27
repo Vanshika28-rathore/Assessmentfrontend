@@ -16,6 +16,7 @@ const AIInterviewPage = () => {
   // States
   const [step, setStep] = useState('upload'); // 'upload' | 'interview'
   const [resumeFile, setResumeFile] = useState(null);
+  const [resumeText, setResumeText] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [ollamaHistory, setOllamaHistory] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -74,6 +75,7 @@ const AIInterviewPage = () => {
   const keepListeningRef = useRef(false);
   const recognitionRunningRef = useRef(false);
   const recognizedFinalRef = useRef('');
+  const hasSavedInterviewRef = useRef(false);
   const proctoringCountsRef = useRef(proctoringCounts);
   const currentViolationRef = useRef(currentViolation);
   const lastTabViolationRef = useRef(0);
@@ -457,9 +459,9 @@ const AIInterviewPage = () => {
           ? ambientNoiseRef.current * 0.92 + avgVolume * 0.08
           : avgVolume;
 
-        const dynamicAvgThreshold = Math.max(11, ambientNoiseRef.current + 5.5);
-        const dynamicVoiceThreshold = Math.max(13, ambientNoiseRef.current + 7);
-        const dynamicPeakThreshold = Math.max(52, ambientNoiseRef.current * 3.3);
+        const dynamicAvgThreshold = Math.max(9, ambientNoiseRef.current + 4.2);
+        const dynamicVoiceThreshold = Math.max(11, ambientNoiseRef.current + 5.2);
+        const dynamicPeakThreshold = Math.max(42, ambientNoiseRef.current * 2.6);
         const peakVolume = Math.max(...freqData);
 
         const hasVoiceLikeSignal =
@@ -474,7 +476,7 @@ const AIInterviewPage = () => {
           }
 
           const voiceDuration = now - voiceStartRef.current;
-          if (voiceStreakRef.current >= 3 && voiceDuration > 700 && now - voiceCooldownRef.current > 7000) {
+          if (voiceStreakRef.current >= 2 && voiceDuration > 350 && now - voiceCooldownRef.current > 4000) {
             voiceCooldownRef.current = now;
             setProctoringCounts((prev) => ({ ...prev, voiceDetected: prev.voiceDetected + 1 }));
             handleViolation({
@@ -487,7 +489,7 @@ const AIInterviewPage = () => {
           voiceStreakRef.current = 0;
           voiceStartRef.current = null;
         }
-      }, 220);
+      }, 160);
     } catch (error) {
       console.error('Audio monitor error:', error);
     }
@@ -642,6 +644,36 @@ const AIInterviewPage = () => {
     return () => clearInterval(timerRef.current);
   }, [timerActive, timeLeft, isVoiceMode, silenceCount]);
 
+  const saveInterviewResult = useCallback(async () => {
+    if (hasSavedInterviewRef.current) return;
+    if (!Array.isArray(ollamaHistory) || ollamaHistory.length < 2) return;
+
+    const chatHistory = ollamaHistory.filter((m) => m && m.role !== 'system');
+    if (chatHistory.length === 0) return;
+
+    try {
+      const response = await fetch(`${API_URL}/api/ai-interview/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: studentId && studentId !== 'unknown-student' ? studentId : null,
+          studentName,
+          resumeText: resumeText || null,
+          chatHistory,
+          rating: null,
+          feedbackComment: null,
+        }),
+      });
+
+      const data = await response.json();
+      if (data?.success) {
+        hasSavedInterviewRef.current = true;
+      }
+    } catch (error) {
+      console.error('Failed to save AI interview result:', error);
+    }
+  }, [ollamaHistory, resumeText, studentId, studentName]);
+
   // Total Session Timer
   useEffect(() => {
     let interval = null;
@@ -651,11 +683,12 @@ const AIInterviewPage = () => {
       }, 1000);
     } else if (sessionTimeLeft === 0) {
       clearInterval(interval);
+      void saveInterviewResult();
       setStep('upload');
       alert("Interview duration (20 minutes) completed! Thank you.");
     }
     return () => clearInterval(interval);
-  }, [step, sessionTimeLeft]);
+  }, [step, sessionTimeLeft, saveInterviewResult]);
 
   useEffect(() => {
     const attachStream = async () => {
@@ -837,6 +870,8 @@ const AIInterviewPage = () => {
           setShowWarning(false);
         }
 
+        hasSavedInterviewRef.current = false;
+        setResumeText(data.resumeText || '');
         setOllamaHistory([
           { role: 'system', content: data.systemPrompt },
           { role: 'assistant', content: data.message }
@@ -910,10 +945,18 @@ const AIInterviewPage = () => {
     setTimeLeft(10);
 
     try {
+      const askedQuestions = messages
+        .filter((m) => m && m.role === 'ai' && typeof m.content === 'string')
+        .map((m) => {
+          const match = m.content.match(/^[^?]*\?/);
+          return match ? match[0].trim() : m.content.trim();
+        })
+        .filter((q) => q.length > 4);
+
       const response = await fetch(`${API_URL}/api/ai-interview/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: ollamaHistory, answer: textToSend }),
+        body: JSON.stringify({ messages: ollamaHistory, answer: textToSend, askedQuestions }),
       });
 
       const data = await response.json();
@@ -952,6 +995,8 @@ const AIInterviewPage = () => {
   };
 
   const handleRestartInterview = () => {
+    void saveInterviewResult();
+
     if (frameIntervalRef.current) {
       clearInterval(frameIntervalRef.current);
       frameIntervalRef.current = null;
@@ -963,6 +1008,7 @@ const AIInterviewPage = () => {
     stopDetection();
     setStep('upload');
     setResumeFile(null);
+    setResumeText('');
     setOllamaHistory([]);
     setMessages([]);
     setUserInput('');
@@ -989,7 +1035,10 @@ const AIInterviewPage = () => {
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-3">
               <button
-                onClick={() => navigate('/dashboard')}
+                onClick={() => {
+                  void saveInterviewResult();
+                  navigate('/dashboard');
+                }}
                 className="flex items-center space-x-2 text-white/70 hover:text-white transition-colors mr-2"
               >
                 <ChevronLeft size={20} />
