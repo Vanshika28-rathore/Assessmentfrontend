@@ -1,6 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BrainCircuit, ArrowLeft, Eye, Star, User, Calendar, FileText, Loader2, X } from 'lucide-react';
+import { BrainCircuit, ArrowLeft, Eye, Star, User, Calendar, FileText, Loader2, X, AlertTriangle } from 'lucide-react';
+
+// Returns true if resume text looks like raw PDF binary/metadata rather than human-readable content
+const isGarbledResumeText = (text = '') => {
+  if (!text || text.trim().length < 10) return false;
+  const pdfSignatures = [
+    /D:\d{10,}\+00'00'/,
+    /ReportLab PDF Library/i,
+    /endobj|endstream|startxref/i,
+    /%%EOF/,
+    /<[0-9a-f]{8,}>/i,
+  ];
+  return pdfSignatures.some((rx) => rx.test(text));
+};
 import AdminLayout from '../../components/AdminLayout';
 import { API_URL } from '../../config/api';
 
@@ -235,9 +248,19 @@ const AIInterviewResults = ({ isTab = false }) => {
                       <FileText size={16} className="text-shnoor-indigo" />
                       <span>Resume Text</span>
                     </h3>
-                    <div className="bg-shnoor-lavender/50 rounded-xl p-4 max-h-64 overflow-y-auto text-xs text-shnoor-navy leading-relaxed whitespace-pre-wrap border border-shnoor-mist/30">
-                      {selectedInterview.resume_text || <span className="text-gray-400 italic">Resume text not captured.</span>}
-                    </div>
+                    {isGarbledResumeText(selectedInterview.resume_text) ? (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                        <AlertTriangle size={16} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold text-amber-700 mb-1">Resume text could not be extracted cleanly</p>
+                          <p className="text-xs text-amber-600">The PDF uploaded by this student appears to be a scanned image or a non-text PDF. The raw PDF metadata was stored instead of readable content. Ask the student to re-upload a text-based PDF (e.g. exported from Word).</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-shnoor-lavender/50 rounded-xl p-4 max-h-64 overflow-y-auto text-xs text-shnoor-navy leading-relaxed whitespace-pre-wrap border border-shnoor-mist/30">
+                        {selectedInterview.resume_text || <span className="text-gray-400 italic">Resume text not captured.</span>}
+                      </div>
+                    )}
                   </div>
 
                   <div className="p-6">

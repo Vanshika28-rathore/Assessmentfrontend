@@ -458,7 +458,7 @@ body { background-color: rgb(var(--theme-page)); color: rgb(var(--theme-text)); 
 html[data-theme='dark'] .admin-status-pill.is-closed { background-color: transparent; border-color: rgb(239 68 68 / 0.45); }
 
 /* ── Theme Overrides (hard-coded Tailwind utilities in non-migrated pages) ── */
-:is(html[data-theme='dark'],html[data-theme='green']) body :is(.bg-white,.bg-\[\#ffffff\],.bg-\[\#F8F8FB\],.bg-\[\#F8FAFC\],.bg-gray-50,.bg-gray-50\/50,.bg-gray-100) { background-color: rgb(var(--theme-card)) !important; }
+:is(html[data-theme='dark'],html[data-theme='green']) body :is(.bg-white,.bg-white\/80,.bg-white\/90,.bg-\[\#ffffff\],.bg-\[\#F8F8FB\],.bg-\[\#F8FAFC\],.bg-gray-50,.bg-gray-50\/50,.bg-gray-100) { background-color: rgb(var(--theme-card)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) body :is(.bg-shnoor-lavender,.bg-shnoor-lavender\/30) { background-color: rgb(var(--theme-panel)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) body .bg-shnoor-navy { background-color: rgb(var(--theme-header)) !important; border-bottom-color: rgb(var(--theme-header-border)) !important; }
 :is(html[data-theme='dark'],html[data-theme='green']) body :is(.bg-shnoor-indigo,button.bg-shnoor-indigo,.\!bg-shnoor-indigo) { background-color: rgb(var(--theme-accent)) !important; color: #fff !important; }

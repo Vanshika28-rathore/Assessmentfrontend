@@ -22,10 +22,10 @@ export const useAICheatingDetection = (onViolation) => {
   const phoneDetectionStreakRef = useRef(0);
 
   // Configuration
-  const DETECTION_INTERVAL = 600;
-  const NO_FACE_THRESHOLD = 1200;
-  const VIOLATION_COOLDOWN = 3000;
-  const FACE_CONFIDENCE_THRESHOLD = 0.5;
+  const DETECTION_INTERVAL = 420;
+  const NO_FACE_THRESHOLD = 1000;
+  const VIOLATION_COOLDOWN = 2500;
+  const FACE_CONFIDENCE_THRESHOLD = 0.42;
 
   // Load MediaPipe models with retry logic
   const loadModels = useCallback(async () => {
@@ -52,7 +52,7 @@ export const useAICheatingDetection = (onViolation) => {
             delegate: 'CPU' // Changed from GPU to CPU for better compatibility
           },
           runningMode: 'VIDEO',
-          minDetectionConfidence: 0.4 // Lowered from 0.5 for better multi-face detection
+          minDetectionConfidence: 0.35 // Keep detection responsive in imperfect lighting
         });
         faceDetectorRef.current = faceDetector;
         console.log('[AI Detection] ✅ Face detector loaded');
@@ -98,16 +98,6 @@ export const useAICheatingDetection = (onViolation) => {
       }
     }
   }, []);
-
-  const canReportViolation = (violationType) => {
-    const now = Date.now();
-    const lastTime = lastViolationTimeRef.current[violationType] || 0;
-    return (now - lastTime) >= VIOLATION_COOLDOWN;
-  };
-
-  const updateViolationTime = (violationType) => {
-    lastViolationTimeRef.current[violationType] = Date.now();
-  };
 
   const detectMultipleFaces = useCallback((detections) => {
     const validFaceDetections = (detections.detections || []).filter((det) => {
@@ -386,6 +376,11 @@ export const useAICheatingDetection = (onViolation) => {
     console.log('[AI] isModelLoaded:', isModelLoaded);
     console.log('[AI] faceDetectorRef:', !!faceDetectorRef.current);
     console.log('[AI] objectDetectorRef:', !!objectDetectorRef.current);
+    if (detectionIntervalRef.current && detectionActiveRef.current) {
+      videoRef.current = videoElement;
+      console.log('[AI] Detection already running');
+      return true;
+    }
     
     // Wait for models to load
     if (!faceDetectorRef.current || !objectDetectorRef.current) {
