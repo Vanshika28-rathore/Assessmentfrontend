@@ -1140,7 +1140,7 @@ int main() {
             <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
 
             {/* Column 1 - Question Palette - Collapsible */}
-            <aside className={`bg-white ${warningsSidebarCollapsed ? 'w-14' : 'w-52'} border-r border-shnoor-mist flex-col flex-shrink-0 overflow-y-auto ${activeCodingTab === 'questions' ? 'flex w-full' : 'hidden lg:flex'} pb-16 lg:pb-0 transition-all duration-300`}>
+            <aside className={`bg-white ${warningsSidebarCollapsed ? 'w-14' : 'w-64'} border-r border-shnoor-mist flex-col flex-shrink-0 overflow-y-auto ${activeCodingTab === 'questions' ? 'flex w-full' : 'hidden lg:flex'} pb-16 lg:pb-0 transition-all duration-300`}>
               {/* Collapse Toggle Button - Desktop Only */}
               <button
                 onClick={() => setWarningsSidebarCollapsed(!warningsSidebarCollapsed)}
@@ -1308,9 +1308,35 @@ int main() {
 
             {/* Column 2 - Problem Description (resizable) */}
             <div
-              style={{ width: `${leftPanelWidth}%` }}
-              className={`bg-white overflow-y-auto ${activeCodingTab === 'description' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'} custom-scrollbar pb-16 lg:pb-0 border-r border-shnoor-mist`}
+              style={{ width: warningsSidebarCollapsed ? '40%' : '35%' }}
+              className={`bg-white overflow-y-auto ${activeCodingTab === 'description' ? 'flex flex-col' : 'hidden lg:flex lg:flex-col'} custom-scrollbar pb-16 lg:pb-0 border-r border-shnoor-mist flex-shrink-0`}
             >
+              {/* Description Header with Expand Button */}
+              <div className="hidden lg:flex items-center justify-between px-4 py-2 border-b border-shnoor-mist bg-shnoor-lavender/30">
+                <h4 className="text-sm font-bold text-shnoor-navy">Problem Description</h4>
+                <button
+                  onClick={() => {
+                    // Toggle description panel width
+                    const descPanel = document.querySelector('.description-panel');
+                    if (descPanel) {
+                      if (descPanel.style.width === '60%') {
+                        descPanel.style.width = warningsSidebarCollapsed ? '40%' : '35%';
+                      } else {
+                        descPanel.style.width = '60%';
+                      }
+                    }
+                  }}
+                  className="p-1 hover:bg-shnoor-mist rounded transition-colors"
+                  title="Expand/Collapse Description"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <polyline points="9 21 3 21 3 15"></polyline>
+                    <line x1="21" y1="3" x2="14" y2="10"></line>
+                    <line x1="3" y1="21" x2="10" y2="14"></line>
+                  </svg>
+                </button>
+              </div>
 
               <div className="p-4 sm:p-6">
                 {/* Title */}
