@@ -322,7 +322,7 @@ const InterviewRoom = () => {
       console.log('Connecting to socket URL:', socketUrl);
 
       const socket = io(socketUrl, {
-        transports: ['polling'], // polling first — avoids connection issues on load balancers
+        transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionAttempts: 10,

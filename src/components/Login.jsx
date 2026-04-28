@@ -139,6 +139,7 @@ const Login = () => {
           localStorage.removeItem('adminUser');
           localStorage.setItem('studentAuthToken', token);
           localStorage.setItem('studentId', user.id.toString());
+          localStorage.setItem('studentFirebaseUid', user.firebase_uid || '');
           localStorage.setItem('studentName', user.full_name || '');
           localStorage.setItem('rollNumber', user.roll_number || '');
           localStorage.setItem('email', user.email || '');

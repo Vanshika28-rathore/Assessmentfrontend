@@ -111,6 +111,17 @@ const Instructions = () => {
         console.log('Camera and microphone permissions granted');
       } catch (permissionError) {
         console.error('Camera/Microphone permission denied:', permissionError);
+
+        if (permissionError?.name === 'NotReadableError') {
+          alert('⚠️ Camera or Microphone Busy\n\nYour browser can see the camera/microphone, but another app or browser tab is already using it.\n\nPlease close other apps using the camera or microphone and try again.');
+          return;
+        }
+
+        if (permissionError?.name === 'NotFoundError') {
+          alert('⚠️ Camera or Microphone Not Found\n\nA required camera or microphone device was not detected.\n\nPlease connect a working camera and microphone, then try again.');
+          return;
+        }
+
         alert('⚠️ Camera and Microphone Access Required\n\nYou must allow both camera and microphone access to take this exam.\n\nPlease:\n1. Click the camera/microphone icons in your browser address bar\n2. Allow both camera and microphone access\n3. Refresh the page and try again');
         return; // Block exam from starting
       }

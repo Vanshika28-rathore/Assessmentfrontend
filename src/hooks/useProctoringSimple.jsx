@@ -49,7 +49,7 @@ export const useProctoringSimple = (onCameraLost) => {
     }
 
     const socket = io(SOCKET_URL, {
-      transports: ['polling'],
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 2000, // Start with 2 second delay
       reconnectionDelayMax: 10000, // Max 10 seconds between attempts

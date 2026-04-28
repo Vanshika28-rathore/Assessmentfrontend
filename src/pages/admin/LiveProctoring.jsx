@@ -102,15 +102,14 @@ const LiveProctoring = () => {
 
     console.log('[Admin] Initializing Socket.IO connection to:', SOCKET_URL);
 
-    // Initialize Socket.io with polling only (WebSocket upgrade causes issues)
+    // Prefer WebSocket in production so multi-instance deployments do not break long-polling sessions.
     const socket = io(SOCKET_URL, {
-      transports: ['polling'], // Use polling only
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
       timeout: 30000,
       forceNew: true,
-      upgrade: false, // Disable upgrade
       autoConnect: true
     });
 

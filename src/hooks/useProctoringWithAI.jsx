@@ -5,6 +5,7 @@ import { useAICheatingDetection } from './useAICheatingDetection';
 const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 const FRAME_RATE = 2; // Reduced from 5 to lower CPU usage during active exam screens
 const FRAME_INTERVAL = 1000 / FRAME_RATE;
+const SOCKET_CONNECT_TIMEOUT_MS = 10000;
 
 export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceived, onForceStop) => {
   const [stream, setStream] = useState(null);
@@ -364,7 +365,7 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
     }
 
     const socket = io(SOCKET_URL, {
-      transports: ['polling'], // Match backend: polling only
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,
@@ -600,11 +601,41 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
       const mediaStream = await requestPermissions();
       const socket = connectSocket(studentData);
       
-      await new Promise((resolve) => {
+      await new Promise((resolve, reject) => {
+        const cleanup = () => {
+          clearTimeout(connectTimeout);
+          socket.off('connect', handleConnect);
+          socket.off('connect_error', handleConnectError);
+          socket.off('reconnect_failed', handleReconnectFailed);
+        };
+
+        const handleConnect = () => {
+          cleanup();
+          resolve();
+        };
+
+        const handleConnectError = (err) => {
+          cleanup();
+          reject(err || new Error('Failed to connect to proctoring server'));
+        };
+
+        const handleReconnectFailed = () => {
+          cleanup();
+          reject(new Error('Failed to reconnect to proctoring server'));
+        };
+
+        const connectTimeout = setTimeout(() => {
+          cleanup();
+          reject(new Error('Timed out connecting to proctoring server'));
+        }, SOCKET_CONNECT_TIMEOUT_MS);
+
         if (socket.connected) {
+          cleanup();
           resolve();
         } else {
-          socket.once('connect', resolve);
+          socket.once('connect', handleConnect);
+          socket.once('connect_error', handleConnectError);
+          socket.once('reconnect_failed', handleReconnectFailed);
         }
       });
       
@@ -637,8 +668,10 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
       return { success: true };
     } catch (err) {
       console.error('[Proctoring] Start error:', err);
-      setError(err.message || 'Failed to start proctoring');
-      return { success: false, error: err.message };
+      const normalizedMessage = err?.message || 'Failed to start proctoring';
+      setError(normalizedMessage);
+      stopProctoring();
+      return { success: false, error: normalizedMessage };
     }
   };
 
@@ -734,6 +767,7 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
     isConnected,
     error,
     permissionGranted,
+    microphonePermissionGranted,
     isModelLoaded,
     detectionActive,
     violations,

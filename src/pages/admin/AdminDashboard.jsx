@@ -2065,6 +2065,22 @@ const AdminDashboard = () => {
       const summaryData = await summaryRes.json();
       const byStudentData = await byStudentRes.json();
 
+      if (!violationsRes.ok) {
+        throw new Error(violationsData.message || 'Failed to fetch violations');
+      }
+
+      if (!flaggedRes.ok) {
+        throw new Error(flaggedData.message || 'Failed to fetch flagged students');
+      }
+
+      if (!summaryRes.ok) {
+        throw new Error(summaryData.message || 'Failed to fetch violation summary');
+      }
+
+      if (!byStudentRes.ok) {
+        throw new Error(byStudentData.message || 'Failed to fetch violations by student');
+      }
+
       if (violationsData.success) {
         setViolations(violationsData.violations);
       }
