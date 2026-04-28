@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Send, Bot, User, Loader2, FileText, RefreshCw, ChevronLeft, Mic, Volume2, VolumeX, Star, CheckCircle, Camera, ShieldAlert } from 'lucide-react';
+import { Upload, Bot, User, Loader2, FileText, RefreshCw, ChevronLeft, Mic, Volume2, VolumeX, CheckCircle, Camera, ShieldAlert } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { API_URL } from '../config/api';
 import shnoorLogo from '../assets/shnoor-logo.png';
@@ -9,6 +9,8 @@ import { useAICheatingDetection } from '../hooks/useAICheatingDetection';
 import { useFullscreen } from '../hooks/useFullscreen';
 import FullscreenWarning from '../components/FullscreenWarning';
 import AIViolationAlert from '../components/AIViolationAlert';
+
+const MAX_INTERVIEW_QUESTIONS = 20;
 
 const AIInterviewPage = () => {
   const navigate = useNavigate();
@@ -27,13 +29,13 @@ const AIInterviewPage = () => {
   const [chatError, setChatError] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isTTSActive, setIsTTSActive] = useState(true);
-  const [isVoiceMode, setIsVoiceMode] = useState(false);
+  const [isVoiceMode] = useState(true);
   const [timeLeft, setTimeLeft] = useState(18);
   const [timerActive, setTimerActive] = useState(false);
   const [sessionTimeLeft, setSessionTimeLeft] = useState(20 * 60);
   const [silenceCount, setSilenceCount] = useState(0);
-  const [, setQuestionCount] = useState(0); // tracks real AI questions only
-  const [rating, setRating] = useState(0);
+  const [questionCount, setQuestionCount] = useState(0); // tracks real AI questions only
+  const [assessmentResult, setAssessmentResult] = useState(null);
   const [feedbackComment, setFeedbackComment] = useState('');
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -48,6 +50,7 @@ const AIInterviewPage = () => {
     objectDetected: 0,
     voiceDetected: 0,
     tabSwitch: 0,
+    responseTimeout: 0,
   });
   const resumeTextRef = useRef('');
   const resumeSkillsRef = useRef([]);    // shuffled skills from resume — consumed one by one
@@ -86,6 +89,8 @@ const AIInterviewPage = () => {
   const lastTabViolationRef = useRef(0);
   const voiceCooldownRef = useRef(0);
   const ambientNoiseRef = useRef(0);
+  const violationEventsRef = useRef([]);
+  const isSpeakingRef = useRef(false);
 
   const proctoringMeta = useMemo(() => ({
     studentId: String(studentId || 'unknown-student'),
@@ -133,7 +138,7 @@ const AIInterviewPage = () => {
 
   const sanitizeResumeSkills = useCallback((skills = [], resumeText = '') => {
     const resumeLower = String(resumeText || '').toLowerCase();
-    const blocked = new Set(['r', 'reportlab', 'pdf', 'library', 'resume', 'candidate', 'student']);
+    const blocked = new Set(['r', 'reportlab', 'pdf', 'library', 'resume', 'document', 'candidate', 'student', 'frontendresume', 'backendresume']);
     const normalized = (Array.isArray(skills) ? skills : [])
       .map((skill) => String(skill || '').trim().toLowerCase())
       .map((skill) => {
@@ -165,7 +170,7 @@ const AIInterviewPage = () => {
     if (matched.length > 0) return [...new Set(matched)];
 
     const words = lower.match(/\b[a-z][a-z0-9+.#-]{3,}\b/g) || [];
-    const stopWords = new Set(['with', 'from', 'that', 'this', 'your', 'have', 'using', 'used', 'project', 'experience']);
+    const stopWords = new Set(['with', 'from', 'that', 'this', 'your', 'have', 'using', 'used', 'project', 'experience', 'resume', 'document', 'frontendresume', 'backendresume']);
     const unique = [...new Set(words.filter((w) => !stopWords.has(w)))];
     return unique.slice(0, 8);
   }, []);
@@ -191,6 +196,10 @@ const AIInterviewPage = () => {
       setProctoringCounts((prev) => ({ ...prev, tabSwitch: prev.tabSwitch + 1 }));
       return;
     }
+    if (type === 'response_timeout') {
+      setProctoringCounts((prev) => ({ ...prev, responseTimeout: prev.responseTimeout + 1 }));
+      return;
+    }
     if (type === 'voice_detected') {
       setProctoringCounts((prev) => ({ ...prev, voiceDetected: prev.voiceDetected + 1 }));
     }
@@ -198,6 +207,13 @@ const AIInterviewPage = () => {
 
   const handleProctoringViolation = useCallback((violation) => {
     if (!violation) return;
+    const event = {
+      type: violation.type || 'unknown',
+      severity: violation.severity || 'medium',
+      message: violation.message || 'AI interview proctoring event recorded.',
+      timestamp: new Date().toISOString(),
+    };
+    violationEventsRef.current = [...violationEventsRef.current, event].slice(-200);
     bumpProctoringCount(violation.type);
 
     if (violationTimeoutRef.current) {
@@ -213,7 +229,7 @@ const AIInterviewPage = () => {
       socketRef.current.emit('proctoring:ai-violation', {
         studentId: proctoringMeta.studentId,
         testId: proctoringMeta.testId,
-        violation,
+        violation: event,
         timestamp: Date.now(),
       });
     }
@@ -333,7 +349,7 @@ const AIInterviewPage = () => {
       const freqData = new Uint8Array(analyser.frequencyBinCount);
       audioMonitorIntervalRef.current = setInterval(() => {
         if (!analyserRef.current) return;
-        if (isListeningRef.current || isSendingRef.current || Date.now() < suppressAudioUntilRef.current) return;
+        if (isListeningRef.current || isSendingRef.current || isSpeakingRef.current || window.speechSynthesis?.speaking || Date.now() < suppressAudioUntilRef.current) return;
         analyserRef.current.getByteFrequencyData(freqData);
 
         const avgVolume = freqData.reduce((sum, v) => sum + v, 0) / freqData.length;
@@ -410,7 +426,7 @@ const AIInterviewPage = () => {
         const transcript = mergeSpeechSegments([...finalSegments, ...interimSegments]);
         if (transcript) {
           const now = Date.now();
-          if (lastSpeechResultRef.current.text === transcript && now - lastSpeechResultRef.current.at < 2000) {
+          if (lastSpeechResultRef.current.text === transcript && now - lastSpeechResultRef.current.at < 400) {
             return;
           }
           lastSpeechResultRef.current = { text: transcript, at: now };
@@ -508,7 +524,8 @@ const AIInterviewPage = () => {
 
     window.speechSynthesis.cancel();
     window.speechSynthesis.resume?.();
-    suppressAudioUntilRef.current = Date.now() + Math.min(6500, Math.max(2200, text.length * 45));
+    isSpeakingRef.current = true;
+    suppressAudioUntilRef.current = Date.now() + Math.min(12000, Math.max(3500, text.length * 70));
     setTimerActive(false); // Stop timer while AI is speaking
     setTimeLeft(18); // Reset to 18s every time AI speaks
 
@@ -521,10 +538,16 @@ const AIInterviewPage = () => {
     utterance.rate = 1.03;
 
     utterance.onend = () => {
+      isSpeakingRef.current = false;
+      suppressAudioUntilRef.current = Date.now() + 1800;
       // Start 10s timer after AI finishes speaking
       if (!isListeningRef.current && !recognitionRunningRef.current) {
         setTimerActive(true);
       }
+    };
+    utterance.onerror = () => {
+      isSpeakingRef.current = false;
+      suppressAudioUntilRef.current = Date.now() + 1800;
     };
 
     window.speechSynthesis.speak(utterance);
@@ -555,14 +578,14 @@ const AIInterviewPage = () => {
       } else {
         // Do not auto-advance without a user response.
         setSilenceCount(0);
-        setCurrentViolation({ type: 'response_timeout', severity: 'low', message: 'No response detected. Please answer when ready.' });
+        handleProctoringViolation({ type: 'response_timeout', severity: 'low', message: 'No response detected within the answer window.' });
         setTimeLeft(6);
         setTimerActive(true);
       }
     }
 
     return () => clearInterval(timerRef.current);
-  }, [timerActive, timeLeft, isSending]);
+  }, [timerActive, timeLeft, isSending, handleProctoringViolation, isTTSActive, messages, silenceCount]);
 
   // Total Session Timer
   useEffect(() => {
@@ -574,8 +597,8 @@ const AIInterviewPage = () => {
     } else if (sessionTimeLeft === 0) {
       clearInterval(interval);
       setTimerActive(false); // Stop local timer
-      setStep('feedback');
-      alert("Interview duration (20 minutes) completed! Thank you.");
+      saveInterviewResult();
+      alert("Interview duration (20 minutes) completed. Your interview is being saved.");
     }
     return () => clearInterval(interval);
   }, [step, sessionTimeLeft]);
@@ -660,6 +683,7 @@ const AIInterviewPage = () => {
         const shuffled = [...ensuredSkills].sort(() => Math.random() - 0.5);
         resumeSkillsRef.current = shuffled;
         usedSkillsRef.current = new Set();
+        askedQuestionsRef.current = [];
         console.log('Resume skills (shuffled):', shuffled);
 
         setMessages([
@@ -671,6 +695,7 @@ const AIInterviewPage = () => {
         ]);
         setSessionTimeLeft(20 * 60); // Reset to 20 mins
         setQuestionCount(0);
+        setAssessmentResult(null);
         setStep('interview');
 
         // Speak initial greeting
@@ -685,6 +710,44 @@ const AIInterviewPage = () => {
       setUploadError('Connection error. Make sure backend is running and try again.');
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const saveInterviewResult = async (historyOverride = null) => {
+    if (isSubmittingFeedback) return;
+    setIsSubmittingFeedback(true);
+    setTimerActive(false);
+    window.speechSynthesis?.cancel();
+    stopProctoring(true);
+
+    try {
+      const chatHistory = (historyOverride || messages.filter(m => !m.hidden))
+        .map(m => ({ role: m.role, content: m.content }));
+
+      const response = await fetch(`${API_URL}/api/ai-interview/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId,
+          studentName,
+          resumeText: resumeTextRef.current,
+          chatHistory,
+          proctoringCounts: proctoringCountsRef.current,
+          proctoringEvents: violationEventsRef.current,
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAssessmentResult(data.assessment || null);
+      }
+      setFeedbackSubmitted(true);
+      setStep('feedback');
+    } catch (e) {
+      console.error('Interview save error:', e);
+      setFeedbackSubmitted(true);
+      setStep('feedback');
+    } finally {
+      setIsSubmittingFeedback(false);
     }
   };
 
@@ -727,6 +790,12 @@ const AIInterviewPage = () => {
     setTimeLeft(18); // Reset timer for next question
 
     try {
+      if (!hideFromUI && askedQuestionsRef.current.length >= MAX_INTERVIEW_QUESTIONS) {
+        const finalHistory = [...messages.filter(m => !m.hidden), userMessage].map(m => ({ role: m.role, content: m.content }));
+        await saveInterviewResult(finalHistory);
+        return;
+      }
+
       // Pick the NEXT UNUSED skill from the shuffled list — no repetition
       const allSkills = resumeSkillsRef.current;
       const used = usedSkillsRef.current;
@@ -759,6 +828,11 @@ const AIInterviewPage = () => {
       const data = await response.json();
 
       if (data.success) {
+        if (data.completed) {
+          const finalHistory = [...messages.filter(m => !m.hidden), userMessage].map(m => ({ role: m.role, content: m.content }));
+          await saveInterviewResult(finalHistory);
+          return;
+        }
         setOllamaHistory(data.updatedHistory);
         const aiMsg = {
           role: 'ai',
@@ -773,12 +847,6 @@ const AIInterviewPage = () => {
         if (!hideFromUI) {
           setQuestionCount((prev) => {
             const newCount = prev + 1;
-            if (newCount >= 10) {
-              // Stop timer and move to feedback
-              setTimerActive(false);
-              window.speechSynthesis?.cancel();
-              setTimeout(() => setStep('feedback'), 1200);
-            }
             return newCount;
           });
         }
@@ -802,40 +870,8 @@ const AIInterviewPage = () => {
     sendAnswerRef.current = handleSendAnswer;
   });
 
-  const handleSubmitFeedback = async () => {
-    setIsSubmittingFeedback(true);
-    try {
-      // Build clean Q&A transcript from messages (only AI + user visible messages)
-      const chatHistory = messages
-        .filter(m => !m.hidden)
-        .map(m => ({ role: m.role, content: m.content }));
-
-      await fetch(`${API_URL}/api/ai-interview/save`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentId,
-          studentName,
-          resumeText: resumeTextRef.current,
-          chatHistory,
-          rating,
-          feedbackComment,
-        }),
-      });
-      setFeedbackSubmitted(true);
-    } catch (e) {
-      console.error('Feedback save error:', e);
-      setFeedbackSubmitted(true); // still show success to user
-    } finally {
-      setIsSubmittingFeedback(false);
-    }
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendAnswer();
-    }
+  const handleSubmitFeedback = () => {
+    saveInterviewResult();
   };
 
   const handleRestartInterview = () => {
@@ -853,6 +889,11 @@ const AIInterviewPage = () => {
     latestTranscriptRef.current = '';
     setCurrentViolation(null);
     setAdminProctorMessage(null);
+    setQuestionCount(0);
+    setAssessmentResult(null);
+    setFeedbackSubmitted(false);
+    setFeedbackComment('');
+    askedQuestionsRef.current = [];
     setProctoringCounts({
       multipleFaces: 0,
       noFace: 0,
@@ -860,7 +901,9 @@ const AIInterviewPage = () => {
       objectDetected: 0,
       voiceDetected: 0,
       tabSwitch: 0,
+      responseTimeout: 0,
     });
+    violationEventsRef.current = [];
     window.speechSynthesis?.cancel();
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -897,20 +940,39 @@ const AIInterviewPage = () => {
 
   useEffect(() => {
     if (step !== 'interview') return;
-    const handleVisibilityChange = () => {
-      if (!document.hidden) return;
+    const recordTabViolation = (message = 'Tab/window focus change detected. Please stay on the interview window.') => {
       const now = Date.now();
       if (now - lastTabViolationRef.current < 3500) return;
       lastTabViolationRef.current = now;
       handleProctoringViolation({
         type: 'tab_switch',
         severity: 'medium',
-        message: 'Tab switch detected. Please stay on the interview window.',
+        message,
       });
+    };
+    const handleVisibilityChange = () => {
+      if (!document.hidden) return;
+      recordTabViolation('Tab switch detected. Please stay on the interview window.');
+    };
+    const handleWindowBlur = () => recordTabViolation('Interview window lost focus.');
+    const handlePageHide = () => recordTabViolation('Interview page was hidden or minimized.');
+    const handleFullscreenChange = () => {
+      const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+      if (!fullscreenElement) recordTabViolation('Fullscreen was exited during the AI interview.');
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('pagehide', handlePageHide);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('pagehide', handlePageHide);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
   }, [step, handleProctoringViolation]);
 
   useEffect(() => {
@@ -940,7 +1002,7 @@ const AIInterviewPage = () => {
                 <img src={shnoorLogo} alt="Shnoor Logo" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="text-white font-bold text-base sm:text-lg leading-tight">AI Interview Practice</h1>
+                <h1 className="text-white font-bold text-base sm:text-lg leading-tight">AI Interview</h1>
               </div>
             </div>
 
@@ -950,9 +1012,7 @@ const AIInterviewPage = () => {
                 <>
                   <button
                     onClick={() => {
-                      setTimerActive(false);
-                      window.speechSynthesis?.cancel();
-                      setStep('feedback');
+                      saveInterviewResult();
                     }}
                     className="flex items-center space-x-2 px-3 sm:px-4 py-2 text-white bg-red-500/80 hover:bg-red-500 border border-red-400 rounded-lg transition-colors text-xs sm:text-sm font-bold shadow-sm"
                   >
@@ -975,7 +1035,7 @@ const AIInterviewPage = () => {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 w-full max-w-[900px] mx-auto px-4 sm:px-6 py-8 flex flex-col">
+      <main className="flex-1 w-full max-w-[1500px] mx-auto px-3 sm:px-5 lg:px-6 py-6 flex flex-col">
         <video ref={proctoringVideoRef} autoPlay muted playsInline className="absolute w-px h-px opacity-0 pointer-events-none" />
 
         {step === 'interview' && showWarning && <FullscreenWarning onEnterFullscreen={enterFullscreen} />}
@@ -999,20 +1059,22 @@ const AIInterviewPage = () => {
 
         {/* Upload Step */}
         {step === 'upload' && (
-          <div className="flex flex-col items-center justify-center flex-1 space-y-6">
+          <div className="w-full max-w-5xl mx-auto flex flex-col xl:flex-row gap-6 items-stretch flex-1 py-2">
             {/* Info Card */}
-            <div className="bg-shnoor-lavender border-2 border-shnoor-mist rounded-xl p-6 w-full max-w-lg text-center">
+            <div className="bg-shnoor-lavender border-2 border-shnoor-mist rounded-xl p-8 w-full xl:w-80 xl:flex-shrink-0 text-center flex flex-col items-center justify-center">
               <div className="w-16 h-16 bg-shnoor-indigo rounded-full flex items-center justify-center mx-auto mb-4">
                 <Bot size={32} className="text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-shnoor-navy mb-2">AI Mock Interview</h2>
+              <h2 className="text-2xl font-bold text-shnoor-navy mb-2">AI Interview</h2>
               <p className="text-shnoor-indigoMedium text-sm leading-relaxed">
                 Upload your resume and our AI interviewer will ask you personalized questions based on your skills and experience.
               </p>
             </div>
 
+            {/* Right column: Upload + Requirements */}
+            <div className="flex flex-col gap-6 flex-1">
             {/* Upload Card */}
-            <div className="bg-theme-card border-2 border-theme-border rounded-xl p-6 w-full max-w-lg shadow-[0_8px_30px_rgba(14,14,39,0.06)]">
+            <div className="bg-theme-card border-2 border-theme-border rounded-xl p-6 w-full shadow-[0_8px_30px_rgba(14,14,39,0.06)]">
               <h3 className="text-lg font-bold text-shnoor-navy mb-4">Upload Your Resume</h3>
 
               <div className="mb-4 border border-theme-border rounded-xl p-3 bg-theme-panel/60">
@@ -1099,9 +1161,9 @@ const AIInterviewPage = () => {
               </button>
             </div>
 
-            {/* Tips */}
-            <div className="bg-white border border-shnoor-mist rounded-xl p-5 w-full max-w-lg">
-              <h4 className="font-bold text-shnoor-navy mb-3 text-sm">💡 Tips for best experience</h4>
+            {/* Requirements */}
+            <div className="bg-white border border-shnoor-mist rounded-xl p-5 w-full">
+              <h4 className="font-bold text-shnoor-navy mb-3 text-sm">Interview requirements</h4>
               <ul className="space-y-2 text-xs text-shnoor-indigoMedium">
                 <li className="flex items-start space-x-2">
                   <span className="text-shnoor-indigo font-bold">•</span>
@@ -1117,6 +1179,7 @@ const AIInterviewPage = () => {
                 </li>
               </ul>
             </div>
+            </div>{/* end right column */}
           </div>
         )}
 
@@ -1126,17 +1189,8 @@ const AIInterviewPage = () => {
 
             <div className="px-4 py-2 bg-shnoor-warningLight border-b border-shnoor-warning/40 text-xs text-shnoor-navy font-medium flex items-center justify-between gap-3">
               <span className="flex items-center gap-2"><ShieldAlert size={14} /> Proctoring active: camera and microphone enabled.</span>
-              <span>Faces: {proctoringCounts.multipleFaces} | No face: {proctoringCounts.noFace} | Phone: {proctoringCounts.phoneDetected} | Object: {proctoringCounts.objectDetected} | Voice: {proctoringCounts.voiceDetected} | Tab: {proctoringCounts.tabSwitch}</span>
+              <span>Faces: {proctoringCounts.multipleFaces} | No face: {proctoringCounts.noFace} | Phone: {proctoringCounts.phoneDetected} | Object: {proctoringCounts.objectDetected} | Voice: {proctoringCounts.voiceDetected} | Tab: {proctoringCounts.tabSwitch} | Timeout: {proctoringCounts.responseTimeout}</span>
             </div>
-
-            {/* Listening Overlay Animation */}
-            {isListening && (
-              <div className="absolute inset-0 bg-shnoor-navy/5 backdrop-blur-[2px] z-10 flex items-center justify-center pointer-events-none">
-                <div className="bg-shnoor-indigo/10 p-6 rounded-full animate-ping border border-shnoor-indigo/30">
-                  <Mic size={48} className="text-shnoor-indigo opacity-70" />
-                </div>
-              </div>
-            )}
 
             {/* Chat Header */}
             <div className="bg-gradient-to-r from-shnoor-navy via-shnoor-indigo to-shnoor-indigoMedium px-6 py-4 flex items-center space-x-3 shadow-md relative overflow-hidden">
@@ -1150,28 +1204,15 @@ const AIInterviewPage = () => {
                 <p className="text-white font-bold">AI Interviewer</p>
                 <div className="flex space-x-3 items-center">
                   <p className="text-white/70 text-[10px] font-bold uppercase tracking-wider">Total Time: {formatTime(sessionTimeLeft)}</p>
+                  <p className="text-white/70 text-[10px] font-bold uppercase tracking-wider">Q: {Math.min(questionCount, MAX_INTERVIEW_QUESTIONS)}/{MAX_INTERVIEW_QUESTIONS}</p>
                   <p className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${timeLeft <= 5 ? 'bg-red-500 text-white animate-pulse' : 'bg-white/20 text-white'}`}>Ans: {timeLeft}s</p>
                 </div>
               </div>
               <div className="ml-auto flex items-center space-x-4">
-                {/* Voice Mode Toggle */}
-                <button
-                  onClick={() => {
-                    setIsVoiceMode(!isVoiceMode);
-                    if (!isVoiceMode) {
-                      setTimerActive(true);
-                    } else {
-                      setTimerActive(false);
-                    }
-                  }}
-                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border transition-all duration-300 font-bold text-xs ${isVoiceMode
-                    ? 'bg-white text-shnoor-indigo border-white shadow-lg scale-105'
-                    : 'bg-white/10 text-white/80 border-white/20 hover:bg-white/20'
-                    }`}
-                >
-                  <Mic size={14} className={isVoiceMode ? 'animate-pulse' : ''} />
-                  <span>{isVoiceMode ? 'Voice Mode ON' : 'Voice Mode OFF'}</span>
-                </button>
+                <div className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border bg-white text-shnoor-indigo border-white shadow-lg font-bold text-xs">
+                  <Mic size={14} className={isListening ? 'animate-pulse' : ''} />
+                  <span>Voice Only</span>
+                </div>
 
                 <button
                   onClick={() => {
@@ -1192,7 +1233,7 @@ const AIInterviewPage = () => {
             </div>
 
             {/* Messages */}
-            <div className={`flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 ${isVoiceMode ? 'opacity-20 blur-sm pointer-events-none grayscale' : ''}`}>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-4">
               {messages.filter(m => !m.hidden && !(isVoiceMode && m.role === 'user')).map((msg, index) => (
                 <div
                   key={index}
@@ -1224,7 +1265,7 @@ const AIInterviewPage = () => {
               ))}
 
               {/* Voice Mode Call Overlay */}
-              {isVoiceMode && step === 'interview' && (
+              {false && isVoiceMode && step === 'interview' && (
                 <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-transparent pointer-events-none">
                   <div className="bg-white/20 backdrop-blur-md p-10 rounded-full border border-white/30 shadow-2xl relative">
                     {/* Glowing Pulse Rings */}
@@ -1270,50 +1311,49 @@ const AIInterviewPage = () => {
               </div>
             )}
 
-            {/* Input Area */}
-            <div className={`border-t border-shnoor-mist/50 p-4 bg-white/80 backdrop-blur-sm z-20 ${isVoiceMode ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
-              <div className="flex items-end space-x-3 relative">
-                {recognitionRef.current && (
-                  <button
-                    onClick={toggleListening}
-                    disabled={isSending}
-                    className={`p-3 rounded-xl transition-colors flex-shrink-0 border-2 ${isListening
-                      ? 'bg-red-50 text-red-500 border-red-200 animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.3)]'
-                      : 'bg-shnoor-lavender/50 text-shnoor-indigoMedium border-transparent hover:bg-shnoor-lavender hover:text-shnoor-indigo transition-all duration-300'
-                      } ${isSending ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    title={isListening ? "Listening... (Auto-sends when you stop)" : "Click to speak"}
-                  >
-                    {isListening ? <Mic size={22} className="animate-bounce" /> : <Mic size={22} />}
-                  </button>
-                )}
+            {/* Voice Input Area */}
+            <div className="border-t border-shnoor-mist/50 p-4 bg-white/80 backdrop-blur-sm z-20">
+              <div className="flex flex-col items-center gap-3">
+                <div className="flex flex-col items-center gap-2">
+                  {recognitionRef.current && (
+                    <button
+                      onClick={toggleListening}
+                      disabled={isSending}
+                      className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl ${isSending
+                        ? 'bg-shnoor-mist/40 cursor-not-allowed'
+                        : isListening
+                          ? 'bg-red-500 hover:bg-red-600 shadow-[0_0_30px_rgba(239,68,68,0.5)] scale-110'
+                          : 'bg-gradient-to-br from-shnoor-indigo to-[#4A4AA4] hover:scale-105 hover:shadow-[0_0_25px_rgba(107,107,174,0.5)]'
+                        }`}
+                      title={isListening ? 'Listening - tap to stop' : 'Tap to speak'}
+                    >
+                      {isListening && (
+                        <span className="absolute inset-0 rounded-full bg-red-400 animate-ping opacity-30 pointer-events-none" />
+                      )}
+                      {isSending
+                        ? <Loader2 size={30} className="animate-spin text-shnoor-navy/40" />
+                        : <Mic size={30} className="text-white" />
+                      }
+                    </button>
+                  )}
+                  <p className="text-xs text-shnoor-indigoMedium font-semibold text-center">
+                    {isSending
+                      ? 'AI is thinking...'
+                      : isListening
+                        ? 'Listening - speak your answer'
+                        : 'Tap the mic and speak. It auto-submits when you stop.'}
+                  </p>
+                </div>
+
                 <textarea
                   value={userInput}
-                  onChange={(e) => setUserInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Type your answer here... (Press Enter to send)"
+                  readOnly
+                  placeholder="Spoken answer preview..."
                   rows={2}
-                  className="flex-1 px-4 py-3 border-2 border-shnoor-mist rounded-xl focus:outline-none focus:ring-2 focus:ring-shnoor-indigo focus:border-shnoor-indigo resize-none text-sm text-shnoor-navy placeholder:text-shnoor-mist"
+                  className="w-full max-w-2xl px-3 py-2 border border-shnoor-mist rounded-lg focus:outline-none resize-none text-xs text-shnoor-navy placeholder:text-shnoor-mist bg-white"
                   disabled={isSending}
                 />
-                <button
-                  onClick={() => handleSendAnswer()}
-                  disabled={!userInput.trim() || isSending}
-                  className={`p-3.5 rounded-xl transition-all duration-300 flex-shrink-0 relative overflow-hidden shadow-sm ${!userInput.trim() || isSending
-                    ? 'bg-shnoor-mist/40 text-shnoor-navy/30 cursor-not-allowed'
-                    : 'bg-gradient-to-br from-shnoor-indigo to-[#4A4AA4] hover:shadow-lg hover:-translate-y-0.5 text-white'
-                    }`}
-                >
-                  {userInput.trim() && !isSending && <div className="absolute inset-0 bg-white/10 opacity-0 hover:opacity-100 transition-opacity"></div>}
-                  {isSending ? (
-                    <Loader2 size={20} className="animate-spin" />
-                  ) : (
-                    <Send size={20} />
-                  )}
-                </button>
               </div>
-              <p className="text-xs text-shnoor-indigoMedium mt-2 text-center">
-                Press <kbd className="px-1.5 py-0.5 bg-shnoor-mist/50 rounded text-xs font-mono">Enter</kbd> to send • <kbd className="px-1.5 py-0.5 bg-shnoor-mist/50 rounded text-xs font-mono">Shift+Enter</kbd> for new line
-              </p>
             </div>
           </div>
         )}
@@ -1341,23 +1381,19 @@ const AIInterviewPage = () => {
               <div className="bg-white border-2 border-shnoor-mist rounded-2xl p-8 w-full max-w-lg shadow-[0_8px_30px_rgba(14,14,39,0.06)] relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-40 h-40 bg-shnoor-indigo/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
                 <h2 className="text-2xl font-bold text-shnoor-navy mb-2 relative z-10">Interview Completed! 🎉</h2>
-                <p className="text-sm text-shnoor-indigoMedium mb-6 relative z-10">
-                  Great job answering the questions. How was your experience?
+                <p className="text-sm text-shnoor-indigoMedium mb-4 relative z-10">
+                  Your technical score is calculated automatically (4 correct answers = 1 star, up to 5 stars).
                 </p>
-
-                <div className="mb-6 relative z-10">
-                  <label className="block text-sm font-bold text-shnoor-navy mb-3">Rate the AI Interviewer</label>
-                  <div className="flex items-center space-x-2">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        onClick={() => setRating(star)}
-                        className={`transition-all transform hover:scale-110 focus:outline-none ${rating >= star ? 'text-yellow-400' : 'text-gray-300'}`}
-                      >
-                        <Star size={36} fill={rating >= star ? "currentColor" : "none"} />
-                      </button>
-                    ))}
-                  </div>
+                <div className="mb-6 bg-shnoor-lavender/50 border border-shnoor-mist rounded-xl p-4">
+                  <p className="text-xs text-shnoor-indigoMedium font-semibold">
+                    Correct Answers: <span className="text-shnoor-navy font-bold">{assessmentResult?.correctCount ?? 0}/{assessmentResult?.totalScoredQuestions ?? 0}</span>
+                  </p>
+                  <p className="text-xs text-shnoor-indigoMedium font-semibold mt-1">
+                    Auto Rating: <span className="text-shnoor-navy font-bold">{assessmentResult?.rating ?? 0}/5</span>
+                  </p>
+                  <p className="text-xs text-shnoor-indigoMedium font-semibold mt-1">
+                    Decision: <span className="text-shnoor-navy font-bold">{assessmentResult?.shortlisted ? 'Auto-shortlisted' : 'Disqualified'}</span>
+                  </p>
                 </div>
 
                 <div className="mb-6 relative z-10">
@@ -1373,8 +1409,8 @@ const AIInterviewPage = () => {
 
                 <button
                   onClick={handleSubmitFeedback}
-                  disabled={isSubmittingFeedback || rating === 0}
-                  className={`w-full py-3.5 px-4 font-bold rounded-xl transition-all shadow-md flex items-center justify-center space-x-2 relative z-10 ${isSubmittingFeedback || rating === 0
+                  disabled={isSubmittingFeedback}
+                  className={`w-full py-3.5 px-4 font-bold rounded-xl transition-all shadow-md flex items-center justify-center space-x-2 relative z-10 ${isSubmittingFeedback
                     ? 'bg-shnoor-mist/50 text-shnoor-navy cursor-not-allowed'
                     : 'bg-gradient-to-r from-shnoor-indigo to-[#4A4AA4] text-white hover:shadow-lg hover:-translate-y-0.5'
                     }`}
@@ -1386,8 +1422,7 @@ const AIInterviewPage = () => {
                     </>
                   ) : (
                     <>
-                      <Send size={18} />
-                      <span>Submit & Finish</span>
+                      <span>Finish</span>
                     </>
                   )}
                 </button>

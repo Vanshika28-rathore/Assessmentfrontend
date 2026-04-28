@@ -1,5 +1,59 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+const MEDIAPIPE_TASKS_VISION_VERSION = '0.10.34';
+const WASM_BASE_URL = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_TASKS_VISION_VERSION}/wasm`;
+
+let modelLoadPromise = null;
+let loadedModels = null;
+
+const createDetectionModels = async () => {
+  if (loadedModels) {
+    return loadedModels;
+  }
+
+  if (modelLoadPromise) {
+    return modelLoadPromise;
+  }
+
+  modelLoadPromise = (async () => {
+    const { FaceDetector, FilesetResolver, ObjectDetector } = await import('@mediapipe/tasks-vision');
+
+    const vision = await FilesetResolver.forVisionTasks(WASM_BASE_URL);
+
+    console.log('[AI Detection] Loading face detector...');
+    const faceDetector = await FaceDetector.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
+        delegate: 'CPU' // Changed from GPU to CPU for better compatibility
+      },
+      runningMode: 'VIDEO',
+      minDetectionConfidence: 0.35 // Keep detection responsive in imperfect lighting
+    });
+    console.log('[AI Detection] âœ… Face detector loaded');
+
+    console.log('[AI Detection] Loading object detector...');
+    const objectDetector = await ObjectDetector.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite',
+        delegate: 'CPU' // Changed from GPU to CPU for better compatibility
+      },
+      runningMode: 'VIDEO',
+      scoreThreshold: 0.3, // Increased from 0.2 for fewer false positives
+      maxResults: 5
+    });
+    console.log('[AI Detection] âœ… Object detector loaded');
+
+    loadedModels = { faceDetector, objectDetector };
+    return loadedModels;
+  })().catch((error) => {
+    modelLoadPromise = null;
+    loadedModels = null;
+    throw error;
+  });
+
+  return modelLoadPromise;
+};
+
 export const useAICheatingDetection = (onViolation) => {
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [violations, setViolations] = useState({
@@ -37,37 +91,11 @@ export const useAICheatingDetection = (onViolation) => {
       try {
         console.log(`[AI Detection] Loading models... (Attempt ${retryCount + 1}/${maxRetries})`);
         
-        // Dynamically import MediaPipe to reduce initial bundle size
-        const { FaceDetector, FilesetResolver, ObjectDetector } = await import('@mediapipe/tasks-vision');
-        
-        const vision = await FilesetResolver.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
-        );
+        const { faceDetector, objectDetector } = await createDetectionModels();
 
-        // Load face detector with retry
-        console.log('[AI Detection] Loading face detector...');
-        const faceDetector = await FaceDetector.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
-            delegate: 'CPU' // Changed from GPU to CPU for better compatibility
-          },
-          runningMode: 'VIDEO',
-          minDetectionConfidence: 0.35 // Keep detection responsive in imperfect lighting
-        });
         faceDetectorRef.current = faceDetector;
         console.log('[AI Detection] ✅ Face detector loaded');
 
-        // Load object detector with retry
-        console.log('[AI Detection] Loading object detector...');
-        const objectDetector = await ObjectDetector.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite',
-            delegate: 'CPU' // Changed from GPU to CPU for better compatibility
-          },
-          runningMode: 'VIDEO',
-          scoreThreshold: 0.3, // Increased from 0.2 for fewer false positives
-          maxResults: 5
-        });
         objectDetectorRef.current = objectDetector;
         console.log('[AI Detection] ✅ Object detector loaded');
 

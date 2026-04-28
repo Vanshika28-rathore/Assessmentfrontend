@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BrainCircuit, ArrowLeft, Eye, Star, User, Calendar, FileText, Loader2, X, AlertTriangle } from 'lucide-react';
+import { BrainCircuit, ArrowLeft, Eye, Star, User, Calendar, FileText, Loader2, X, AlertTriangle, Download, CheckCircle, XCircle } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 // Returns true if resume text looks like raw PDF binary/metadata rather than human-readable content
 const isGarbledResumeText = (text = '') => {
@@ -13,6 +14,87 @@ const isGarbledResumeText = (text = '') => {
     /<[0-9a-f]{8,}>/i,
   ];
   return pdfSignatures.some((rx) => rx.test(text));
+};
+
+const SKILL_KEYWORDS = {
+  React: ['react', 'jsx', 'hook', 'usestate', 'useeffect', 'component', 'props', 'redux', 'virtual dom'],
+  JavaScript: ['javascript', 'js', 'promise', 'async', 'closure', 'prototype', 'event loop', 'es6', 'arrow'],
+  Python: ['python', 'django', 'flask', 'pandas', 'numpy', 'pip', 'decorator', 'generator'],
+  Java: ['java', 'spring', 'jvm', 'oop', 'inheritance', 'polymorphism', 'interface', 'exception'],
+  'Node.js': ['node', 'nodejs', 'express', 'npm', 'middleware', 'rest api', 'backend'],
+  'SQL / Database': ['sql', 'mysql', 'postgresql', 'mongodb', 'database', 'query', 'join', 'index', 'schema'],
+  'CSS / HTML': ['css', 'html', 'flexbox', 'grid', 'responsive', 'tailwind', 'bootstrap'],
+  'Cloud / DevOps': ['aws', 'azure', 'docker', 'kubernetes', 'git', 'ci/cd', 'linux', 'deployment'],
+  'Data Structures': ['array', 'linked list', 'tree', 'graph', 'stack', 'queue', 'algorithm', 'big o', 'sorting'],
+  TypeScript: ['typescript', 'type', 'interface', 'generics', 'enum'],
+  'General / Other': [],
+};
+
+const detectSkill = (text = '') => {
+  const lower = text.toLowerCase();
+  for (const [skill, keywords] of Object.entries(SKILL_KEYWORDS)) {
+    if (skill === 'General / Other') continue;
+    if (keywords.some((k) => lower.includes(k))) return skill;
+  }
+  return 'General / Other';
+};
+
+const evaluateAnswer = (answer = '') => {
+  const lower = answer.toLowerCase().trim();
+  const words = lower.split(/\s+/).filter(Boolean).length;
+  const skipPhrases = ['not sure', "don't know", 'move to next', 'next question', 'i am not sure', 'no idea', 'skip'];
+  if (skipPhrases.some((p) => lower.includes(p)) || words < 4) return 'not_answered';
+  if (words < 12) return 'partial';
+  if (words >= 30) return 'detailed';
+  return 'basic';
+};
+
+const EVAL_META = {
+  detailed: { label: 'Detailed Answer', color: 'bg-blue-100 text-blue-700 border-blue-200', dot: 'bg-blue-500' },
+  basic: { label: 'Basic Answer', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500' },
+  partial: { label: 'Partial Answer', color: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500' },
+  not_answered: { label: 'Not Answered / Skipped', color: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500' },
+};
+
+const buildSummary = (chatHistory = []) => {
+  if (!Array.isArray(chatHistory) || chatHistory.length === 0) return null;
+
+  const pairs = [];
+  for (let i = 0; i < chatHistory.length - 1; i += 1) {
+    const cur = chatHistory[i];
+    const next = chatHistory[i + 1];
+    const role = cur?.role === 'assistant' ? 'ai' : cur?.role;
+    const nextRole = next?.role === 'assistant' ? 'ai' : next?.role;
+    if (role === 'ai' && nextRole === 'user') {
+      pairs.push({
+        question: cur.content || '',
+        answer: next.content || '',
+        skill: detectSkill(cur.content || ''),
+        eval: evaluateAnswer(next.content || ''),
+      });
+    }
+  }
+  if (pairs.length === 0) return null;
+
+  const groups = {};
+  pairs.forEach((pair) => {
+    if (!groups[pair.skill]) groups[pair.skill] = [];
+    groups[pair.skill].push(pair);
+  });
+
+  const totalQ = pairs.length;
+  const answered = pairs.filter((pair) => pair.eval !== 'not_answered').length;
+  const detailed = pairs.filter((pair) => pair.eval === 'detailed').length;
+  const notAns = pairs.filter((pair) => pair.eval === 'not_answered').length;
+
+  let overallGrade = 'Poor';
+  let gradeColor = 'text-red-700 bg-red-50 border-red-200';
+  const pct = answered / totalQ;
+  if (pct >= 0.8) { overallGrade = 'Excellent'; gradeColor = 'text-green-700 bg-green-50 border-green-200'; }
+  else if (pct >= 0.6) { overallGrade = 'Good'; gradeColor = 'text-blue-700 bg-blue-50 border-blue-200'; }
+  else if (pct >= 0.4) { overallGrade = 'Average'; gradeColor = 'text-amber-700 bg-amber-50 border-amber-200'; }
+
+  return { pairs, groups, totalQ, answered, detailed, notAns, overallGrade, gradeColor };
 };
 import AdminLayout from '../../components/AdminLayout';
 import { API_URL } from '../../config/api';
@@ -64,15 +146,59 @@ const AIInterviewResults = ({ isTab = false }) => {
           normalizedChatHistory = [];
         }
 
+        const parseJsonField = (value, fallback) => {
+          if (typeof value !== 'string') return value || fallback;
+          try {
+            return JSON.parse(value);
+          } catch {
+            return fallback;
+          }
+        };
+
         setSelectedInterview({
           ...interview,
-          chat_history: normalizedChatHistory
+          chat_history: normalizedChatHistory,
+          assessment_summary: parseJsonField(interview.assessment_summary, {}),
+          scored_questions: parseJsonField(interview.scored_questions, []),
+          ignored_questions: parseJsonField(interview.ignored_questions, []),
+          proctoring_counts: parseJsonField(interview.proctoring_counts, {}),
+          proctoring_events: parseJsonField(interview.proctoring_events, [])
         });
       }
     } catch (err) {
       console.error('Failed to fetch interview detail:', err);
     } finally {
       setLoadingDetail(false);
+    }
+  };
+
+  const downloadReport = async (id, studentName) => {
+    try {
+      const res = await fetch(`${API_URL}/api/ai-interview/results/${id}/report`);
+      if (!res.ok) {
+        let message = 'Failed to download report.';
+        try {
+          const data = await res.json();
+          message = data.message || message;
+        } catch {
+          // Ignore non-JSON error bodies.
+        }
+        alert(message);
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Interview_Report_${String(studentName || 'student').replace(/\s+/g, '_')}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download AI interview report:', err);
+      alert('Failed to download report.');
     }
   };
 
@@ -98,6 +224,63 @@ const AIInterviewResults = ({ isTab = false }) => {
       day: '2-digit', month: 'short', year: 'numeric',
       hour: '2-digit', minute: '2-digit'
     });
+  };
+
+  const exportResults = async (type = 'all') => {
+    try {
+      let res = await fetch(`${API_URL}/api/ai-interview/export?type=${type}`);
+      if (res.status === 404) {
+        res = await fetch(`${API_URL}/api/ai-interview/results/export?type=${type}`);
+      }
+      const data = await res.json();
+      if (!data.success) {
+        alert(data.message || 'Failed to export AI interview results.');
+        return;
+      }
+
+      const rows = (data.data || []).map((row) => {
+        const counts = row.proctoring_counts || {};
+        return {
+        'Interview ID': row.id,
+        'Student ID': row.student_id || '-',
+        'Roll Number': row.roll_number || row.student_id || '-',
+        'Student Name': row.full_name || row.student_name || 'Anonymous',
+        'Email': row.email || '-',
+        'College/Institute': row.institute || '-',
+        'Correct Answers': `${row.correct_count || 0}/${row.total_scored_questions || 0}`,
+        'Rating': `${row.rating || 0}/5`,
+        'Status': row.shortlisted ? 'Auto-shortlisted' : 'Disqualified',
+        'No Face': counts.noFace || 0,
+        'Multiple Faces': counts.multipleFaces || 0,
+        'Phone Detected': counts.phoneDetected || 0,
+        'Object Detected': counts.objectDetected || 0,
+        'Voice/Noise': counts.voiceDetected || 0,
+        'Tab Switch': counts.tabSwitch || 0,
+        'Response Timeout': counts.responseTimeout || 0,
+        'Summary': row.feedback_comment || '',
+        'Completed At': formatDate(row.created_at),
+        };
+      });
+
+      if (rows.length === 0) {
+        alert('No AI interview results found for this export.');
+        return;
+      }
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 30 },
+        { wch: 24 }, { wch: 18 }, { wch: 10 }, { wch: 18 }, { wch: 10 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
+        { wch: 16 }, { wch: 70 }, { wch: 22 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, 'AI Interview Results');
+      XLSX.writeFile(wb, `AI_Interview_${type}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (err) {
+      console.error('AI interview export failed:', err);
+      alert('Failed to export AI interview results.');
+    }
   };
 
   const renderContent = () => (
@@ -127,6 +310,18 @@ const AIInterviewResults = ({ isTab = false }) => {
         </div>
       )}
 
+      <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-4">
+        <button onClick={() => exportResults('shortlisted')} className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-shnoor-success text-white text-sm font-bold hover:opacity-90 w-full sm:w-auto">
+          <Download size={15} /> Download Shortlisted
+        </button>
+        <button onClick={() => exportResults('disqualified')} className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-shnoor-danger text-white text-sm font-bold hover:opacity-90 w-full sm:w-auto">
+          <Download size={15} /> Download Disqualified
+        </button>
+        <button onClick={() => exportResults('all')} className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-shnoor-indigo text-white text-sm font-bold hover:bg-[#4d4d9c] w-full sm:w-auto">
+          <Download size={15} /> Download Combined
+        </button>
+      </div>
+
       <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(14,14,39,0.06)] overflow-hidden border border-shnoor-mist/30">
         {loading ? (
           <div className="flex items-center justify-center py-24">
@@ -150,6 +345,8 @@ const AIInterviewResults = ({ isTab = false }) => {
                   <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wider text-shnoor-indigoMedium">Student</th>
                   <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wider text-shnoor-indigoMedium">Date</th>
                   <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wider text-shnoor-indigoMedium">Rating</th>
+                  <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wider text-shnoor-indigoMedium">Score</th>
+                  <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wider text-shnoor-indigoMedium">Status</th>
                   <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wider text-shnoor-indigoMedium">Feedback</th>
                   <th className="text-left px-6 py-4 text-xs font-bold uppercase tracking-wider text-shnoor-indigoMedium">Action</th>
                 </tr>
@@ -167,8 +364,8 @@ const AIInterviewResults = ({ isTab = false }) => {
                           <User size={16} className="text-shnoor-indigo" />
                         </div>
                         <div>
-                          <p className="font-bold text-shnoor-navy text-sm">{interview.student_name || 'Anonymous'}</p>
-                          <p className="text-xs text-shnoor-indigoMedium">{interview.student_id || '-'}</p>
+                          <p className="font-bold text-shnoor-navy text-sm">{interview.full_name || interview.student_name || 'Anonymous'}</p>
+                          <p className="text-xs text-shnoor-indigoMedium">{interview.roll_number || interview.student_id || '-'}</p>
                         </div>
                       </div>
                     </td>
@@ -179,6 +376,19 @@ const AIInterviewResults = ({ isTab = false }) => {
                       </div>
                     </td>
                     <td className="px-6 py-4">{renderStars(interview.rating)}</td>
+                    <td className="px-6 py-4 text-sm font-bold text-shnoor-navy">
+                      {interview.correct_count ?? 0}/{interview.total_scored_questions ?? 0}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                        interview.shortlisted
+                          ? 'bg-shnoor-successLight text-shnoor-success border-shnoor-success'
+                          : 'bg-shnoor-lavender text-shnoor-indigoMedium border-shnoor-mist'
+                      }`}>
+                        {interview.shortlisted ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                        {interview.shortlisted ? 'Shortlisted' : 'Reviewed'}
+                      </span>
+                    </td>
 
                     <td className="px-6 py-4">
                       <p className="text-sm text-shnoor-navy max-w-[200px] truncate">
@@ -212,12 +422,21 @@ const AIInterviewResults = ({ isTab = false }) => {
                 </h2>
                 <p className="text-white/70 text-xs mt-0.5">{formatDate(selectedInterview?.created_at)}</p>
               </div>
-              <button
-                onClick={() => setSelectedInterview(null)}
-                className="text-white hover:bg-white/20 rounded-full p-2 transition-colors"
-              >
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2 print:hidden">
+                <button
+                  onClick={() => downloadReport(selectedInterview?.id, selectedInterview?.student_name)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg border border-white/20 text-white hover:bg-white/10 text-xs sm:text-sm font-bold transition-colors"
+                >
+                  <Download size={13} />
+                  <span>Download Report</span>
+                </button>
+                <button
+                  onClick={() => setSelectedInterview(null)}
+                  className="text-white hover:bg-white/20 rounded-full p-2 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             {loadingDetail ? (
@@ -227,20 +446,89 @@ const AIInterviewResults = ({ isTab = false }) => {
               </div>
             ) : selectedInterview && (
               <div className="overflow-y-auto flex-1">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 p-6 border-b border-shnoor-mist/30">
-                  <div className="bg-shnoor-lavender rounded-xl p-4">
-                    <p className="text-xs text-shnoor-indigoMedium font-bold uppercase tracking-wider mb-1">Student ID</p>
-                    <p className="font-bold text-shnoor-navy">{selectedInterview.student_id || '-'}</p>
+                <div className="flex flex-wrap gap-3 px-6 py-3 border-b border-shnoor-mist/30">
+                  <div className="flex items-center gap-2 bg-shnoor-lavender rounded-lg px-3 py-2">
+                    <p className="text-xs text-shnoor-indigoMedium font-bold uppercase tracking-wider">Student ID:</p>
+                    <p className="font-bold text-shnoor-navy text-sm">{selectedInterview.student_id || '-'}</p>
                   </div>
-                  <div className="bg-shnoor-lavender rounded-xl p-4">
-                    <p className="text-xs text-shnoor-indigoMedium font-bold uppercase tracking-wider mb-1">Rating</p>
+                  <div className="flex items-center gap-2 bg-shnoor-lavender rounded-lg px-3 py-2">
+                    <p className="text-xs text-shnoor-indigoMedium font-bold uppercase tracking-wider mr-1">Rating:</p>
                     {renderStars(selectedInterview.rating)}
                   </div>
-                  <div className="bg-shnoor-lavender rounded-xl p-4 col-span-2 sm:col-span-1">
-                    <p className="text-xs text-shnoor-indigoMedium font-bold uppercase tracking-wider mb-1">Feedback</p>
-                    <p className="text-sm text-shnoor-navy">{selectedInterview.feedback_comment || 'No comment'}</p>
-                  </div>
                 </div>
+
+                {(() => {
+                  const summary = buildSummary(selectedInterview.chat_history);
+                  if (!summary) return null;
+                  return (
+                    <div className="p-6 border-b border-shnoor-mist/30 space-y-5">
+                      <h3 className="text-sm font-bold text-shnoor-navy flex items-center space-x-2">
+                        <BrainCircuit size={16} className="text-shnoor-indigo" />
+                        <span>Interview Performance Summary</span>
+                      </h3>
+
+                      <div className="flex flex-wrap gap-3 items-center">
+                        <span className={`px-4 py-1.5 rounded-full text-sm font-bold border ${summary.gradeColor}`}>
+                          Overall: {summary.overallGrade}
+                        </span>
+                        <span className="px-3 py-1 bg-shnoor-lavender text-shnoor-navy rounded-full text-xs font-semibold border border-shnoor-mist">
+                          {summary.totalQ} Questions Asked
+                        </span>
+                        <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-xs font-semibold border border-green-200">
+                          {summary.answered} Answered
+                        </span>
+                        <span className="px-3 py-1 bg-red-50 text-red-700 rounded-full text-xs font-semibold border border-red-200">
+                          {summary.notAns} Skipped / Not Answered
+                        </span>
+                        <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold border border-blue-200">
+                          {summary.detailed} Detailed Answers
+                        </span>
+                      </div>
+
+                      <div className="space-y-4">
+                        {Object.entries(summary.groups).map(([skill, qs]) => {
+                          const counts = { detailed: 0, basic: 0, partial: 0, not_answered: 0 };
+                          qs.forEach((q) => { counts[q.eval] += 1; });
+                          const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+                          const meta = EVAL_META[dominant];
+
+                          return (
+                            <div key={skill} className="bg-shnoor-lavender/40 border border-shnoor-mist/40 rounded-xl p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2.5 h-2.5 rounded-full ${meta.dot}`} />
+                                  <span className="font-bold text-shnoor-navy text-sm">{skill}</span>
+                                  <span className="text-xs text-shnoor-indigoMedium">- {qs.length} question{qs.length > 1 ? 's' : ''}</span>
+                                </div>
+                                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${meta.color}`}>
+                                  {meta.label}
+                                </span>
+                              </div>
+
+                              <div className="space-y-2">
+                                {qs.map((pair, idx) => (
+                                  <div key={`${skill}-${idx}`} className="bg-white rounded-lg border border-shnoor-mist/50 p-3">
+                                    <div className="flex items-start justify-between gap-2 mb-1">
+                                      <p className="text-xs font-semibold text-shnoor-indigo leading-relaxed">
+                                        Q{idx + 1}. {pair.question}
+                                      </p>
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${EVAL_META[pair.eval].color}`}>
+                                        {EVAL_META[pair.eval].label}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-gray-600 leading-relaxed pl-4 border-l-2 border-shnoor-mist">
+                                      {pair.answer || <span className="italic text-gray-400">No answer recorded</span>}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-shnoor-mist/30">
                   <div className="p-6">
@@ -261,6 +549,71 @@ const AIInterviewResults = ({ isTab = false }) => {
                         {selectedInterview.resume_text || <span className="text-gray-400 italic">Resume text not captured.</span>}
                       </div>
                     )}
+
+                    <div className="mt-5">
+                      <h3 className="text-sm font-bold text-shnoor-navy mb-3 flex items-center space-x-2">
+                        <BrainCircuit size={16} className="text-shnoor-indigo" />
+                        <span>Interview Summary</span>
+                      </h3>
+                      <div className="bg-white border border-shnoor-mist/40 rounded-xl p-4 text-xs text-shnoor-navy leading-relaxed">
+                        <p>{selectedInterview.assessment_summary?.text || selectedInterview.feedback_comment || 'Summary not available for this interview.'}</p>
+                        <div className="grid grid-cols-2 gap-3 mt-4">
+                          <div className="bg-shnoor-lavender/60 rounded-lg p-3">
+                            <p className="uppercase text-[10px] font-bold text-shnoor-indigoMedium">Correct</p>
+                            <p className="text-lg font-bold">{selectedInterview.correct_count ?? 0}/{selectedInterview.total_scored_questions ?? 0}</p>
+                          </div>
+                          <div className="bg-shnoor-lavender/60 rounded-lg p-3">
+                            <p className="uppercase text-[10px] font-bold text-shnoor-indigoMedium">Decision</p>
+                            <p className="text-sm font-bold">{selectedInterview.shortlisted ? 'Auto-shortlisted' : 'Disqualified'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {Array.isArray(selectedInterview.ignored_questions) && selectedInterview.ignored_questions.length > 0 && (
+                      <div className="mt-5">
+                        <h3 className="text-sm font-bold text-shnoor-navy mb-3">Ignored / Non-scored Prompts</h3>
+                        <div className="space-y-2 max-h-36 overflow-y-auto">
+                          {selectedInterview.ignored_questions.map((item, idx) => (
+                            <div key={idx} className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+                              <p className="font-semibold">{item.question}</p>
+                              <p className="mt-1">{item.reason}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-5">
+                      <h3 className="text-sm font-bold text-shnoor-navy mb-3">AI Interview Violations</h3>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {[
+                          ['No face', selectedInterview.proctoring_counts?.noFace],
+                          ['Multiple faces', selectedInterview.proctoring_counts?.multipleFaces],
+                          ['Phone', selectedInterview.proctoring_counts?.phoneDetected],
+                          ['Object', selectedInterview.proctoring_counts?.objectDetected],
+                          ['Voice/noise', selectedInterview.proctoring_counts?.voiceDetected],
+                          ['Tab switch', selectedInterview.proctoring_counts?.tabSwitch],
+                          ['Timeout', selectedInterview.proctoring_counts?.responseTimeout],
+                        ].map(([label, value]) => (
+                          <div key={label} className="bg-shnoor-lavender/60 rounded-lg p-2 border border-shnoor-mist/30">
+                            <p className="text-shnoor-indigoMedium font-bold">{label}</p>
+                            <p className="text-shnoor-navy text-base font-bold">{value || 0}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {Array.isArray(selectedInterview.proctoring_events) && selectedInterview.proctoring_events.length > 0 && (
+                        <div className="mt-3 space-y-2 max-h-40 overflow-y-auto">
+                          {selectedInterview.proctoring_events.slice(-8).reverse().map((event, idx) => (
+                            <div key={`${event.timestamp}-${idx}`} className="bg-red-50 border border-red-100 rounded-lg p-2 text-xs text-red-700">
+                              <p className="font-bold">{String(event.type || '').replace('_', ' ')} - {event.severity || 'medium'}</p>
+                              <p>{event.message}</p>
+                              <p className="text-red-500 mt-1">{event.timestamp ? formatDate(event.timestamp) : '-'}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="p-6">
@@ -268,7 +621,7 @@ const AIInterviewResults = ({ isTab = false }) => {
                       <BrainCircuit size={16} className="text-shnoor-indigo" />
                       <span>Interview Transcript</span>
                     </h3>
-                    <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                    <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
                       {Array.isArray(selectedInterview.chat_history) && selectedInterview.chat_history.map((msg, idx) => {
                         const role = msg?.role === 'assistant' ? 'ai' : msg?.role;
                         return role === 'ai' || role === 'user' ? (
@@ -291,16 +644,42 @@ const AIInterviewResults = ({ isTab = false }) => {
                           </div>
                         ) : null;
                       })}
-                      {(!selectedInterview.chat_history || selectedInterview.chat_history.length === 0) && (
-                        <p className="text-center text-shnoor-indigoMedium text-sm py-8">No transcript available.</p>
-                      )}
-                    </div>
+                    {(!selectedInterview.chat_history || selectedInterview.chat_history.length === 0) && (
+                      <p className="text-center text-shnoor-indigoMedium text-sm py-8">No transcript available.</p>
+                    )}
+                  </div>
+
+                    {Array.isArray(selectedInterview.scored_questions) && selectedInterview.scored_questions.length > 0 && (
+                      <div className="mt-5">
+                        <h3 className="text-sm font-bold text-shnoor-navy mb-3">Scored Technical Questions</h3>
+                        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                          {selectedInterview.scored_questions.map((item) => (
+                            <div key={item.number} className="border border-shnoor-mist/40 rounded-xl p-3 bg-white">
+                              <div className="flex items-center justify-between gap-3 mb-2">
+                                <p className="text-xs font-bold text-shnoor-indigo">Q{item.number}</p>
+                                <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase ${
+                                  item.verdict === 'correct'
+                                    ? 'bg-shnoor-successLight text-shnoor-success'
+                                    : item.verdict === 'partially_correct'
+                                      ? 'bg-amber-100 text-amber-700'
+                                      : 'bg-shnoor-dangerLight text-shnoor-danger'
+                                }`}>
+                                  {String(item.verdict || '').replace('_', ' ')}
+                                </span>
+                              </div>
+                              <p className="text-xs font-semibold text-shnoor-navy">{item.question}</p>
+                              <p className="text-xs text-shnoor-indigoMedium mt-2">{item.reason}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             )}
 
-            <div className="p-4 border-t border-shnoor-mist/30 flex justify-end flex-shrink-0 bg-white">
+            <div className="p-4 border-t border-shnoor-mist/30 flex justify-end flex-shrink-0 bg-white print:hidden">
               <button
                 onClick={() => setSelectedInterview(null)}
                 className="px-5 py-2.5 bg-shnoor-light hover:bg-shnoor-lavender text-shnoor-navy rounded-xl font-medium text-sm transition-colors"
@@ -319,6 +698,32 @@ const AIInterviewResults = ({ isTab = false }) => {
   return (
     <AdminLayout title="AI Interview Results">
       {renderContent()}
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .fixed.inset-0, .fixed.inset-0 * { visibility: visible; }
+          .fixed.inset-0 {
+            position: absolute !important;
+            inset: 0 !important;
+            background: white !important;
+            padding: 0 !important;
+          }
+          .fixed.inset-0 > div {
+            max-height: none !important;
+            height: auto !important;
+            width: 100% !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+          }
+          .overflow-y-auto, .max-h-64, .max-h-72, .max-h-[90vh] {
+            max-height: none !important;
+            overflow: visible !important;
+          }
+          .print\\:hidden {
+            display: none !important;
+          }
+        }
+      `}</style>
     </AdminLayout>
   );
 };

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Video, Calendar, Clock, Users, Trash2, Edit2 } from 'lucide-react';
+import { Video, Calendar, Clock, Users, Trash2, Edit2, Download } from 'lucide-react';
 import { apiFetch } from '../../config/api';
+import * as XLSX from 'xlsx';
 
 const InterviewsList = () => {
   const navigate = useNavigate();
@@ -163,6 +164,39 @@ const InterviewsList = () => {
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
+  const downloadInterviewResults = () => {
+    const completed = interviews.filter((interview) => interview.status === 'completed');
+    if (completed.length === 0) {
+      alert('No completed interview results found for the current filter.');
+      return;
+    }
+
+    const rows = completed.map((interview) => ({
+      'Interview ID': interview.id,
+      'Student ID': interview.student_id,
+      'Student Name': interview.student_name,
+      'Email': interview.student_email,
+      'Institute': interview.institute_name || '-',
+      'Test': interview.test_title || '-',
+      'Scheduled Time': formatDateTime(interview.scheduled_time),
+      'Duration': `${interview.duration} minutes`,
+      'Technical Score': interview.technical_score ?? '-',
+      'Communication Score': interview.communication_score ?? '-',
+      'Recommendation': interview.recommendation || '-',
+      'Admin Notes': interview.admin_notes || '-',
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 14 }, { wch: 12 }, { wch: 24 }, { wch: 30 }, { wch: 24 },
+      { wch: 26 }, { wch: 24 }, { wch: 14 }, { wch: 16 }, { wch: 20 },
+      { wch: 18 }, { wch: 50 }
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, 'Interview Results');
+    XLSX.writeFile(wb, `Interview_Results_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -214,6 +248,14 @@ const InterviewsList = () => {
               <option value="completed">Completed</option>
             </select>
           </div>
+
+          <button
+            onClick={downloadInterviewResults}
+            className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-shnoor-indigo text-white font-semibold hover:bg-[#4d4d9c] transition-colors"
+          >
+            <Download size={16} />
+            Download Interview Results
+          </button>
         </div>
       </div>
 
