@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, Bot, User, Loader2, FileText, RefreshCw, ChevronLeft, Mic, Volume2, VolumeX, CheckCircle, Camera, ShieldAlert } from 'lucide-react';
+import { Upload, Bot, User, Loader2, FileText, RefreshCw, ChevronLeft, Mic, Volume2, VolumeX, CheckCircle, Camera, ShieldAlert, Star } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { API_URL } from '../config/api';
 import shnoorLogo from '../assets/shnoor-logo.png';
@@ -11,6 +11,8 @@ import FullscreenWarning from '../components/FullscreenWarning';
 import AIViolationAlert from '../components/AIViolationAlert';
 
 const MAX_INTERVIEW_QUESTIONS = 20;
+const ANSWER_WINDOW_SECONDS = 18;
+const ANSWER_GRACE_SECONDS = 6;
 
 const AIInterviewPage = () => {
   const navigate = useNavigate();
@@ -29,8 +31,8 @@ const AIInterviewPage = () => {
   const [chatError, setChatError] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isTTSActive, setIsTTSActive] = useState(true);
-  const [isVoiceMode] = useState(true);
-  const [timeLeft, setTimeLeft] = useState(18);
+  const isVoiceMode = true;
+  const [timeLeft, setTimeLeft] = useState(ANSWER_WINDOW_SECONDS);
   const [timerActive, setTimerActive] = useState(false);
   const [sessionTimeLeft, setSessionTimeLeft] = useState(20 * 60);
   const [silenceCount, setSilenceCount] = useState(0);
@@ -43,6 +45,7 @@ const AIInterviewPage = () => {
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [adminProctorMessage, setAdminProctorMessage] = useState(null);
   const [currentViolation, setCurrentViolation] = useState(null);
+  const [speechHints, setSpeechHints] = useState([]);
   const [proctoringCounts, setProctoringCounts] = useState({
     multipleFaces: 0,
     noFace: 0,
@@ -89,8 +92,11 @@ const AIInterviewPage = () => {
   const lastTabViolationRef = useRef(0);
   const voiceCooldownRef = useRef(0);
   const ambientNoiseRef = useRef(0);
+  const noiseBurstRef = useRef({ startedAt: 0, lastSeenAt: 0 });
   const violationEventsRef = useRef([]);
   const isSpeakingRef = useRef(false);
+  const answerWindowPhaseRef = useRef('primary');
+  const isSavingInterviewRef = useRef(false);
 
   const proctoringMeta = useMemo(() => ({
     studentId: String(studentId || 'unknown-student'),
@@ -117,9 +123,86 @@ const AIInterviewPage = () => {
     userInputRef.current = userInput;
   }, [userInput]);
 
+  const levenshteinDistance = useCallback((source = '', target = '') => {
+    const a = source.toLowerCase();
+    const b = target.toLowerCase();
+    if (!a) return b.length;
+    if (!b) return a.length;
+
+    const matrix = Array.from({ length: a.length + 1 }, (_, row) =>
+      Array.from({ length: b.length + 1 }, (_, col) => (row === 0 ? col : col === 0 ? row : 0))
+    );
+
+    for (let row = 1; row <= a.length; row += 1) {
+      for (let col = 1; col <= b.length; col += 1) {
+        const cost = a[row - 1] === b[col - 1] ? 0 : 1;
+        matrix[row][col] = Math.min(
+          matrix[row - 1][col] + 1,
+          matrix[row][col - 1] + 1,
+          matrix[row - 1][col - 1] + cost
+        );
+      }
+    }
+
+    return matrix[a.length][b.length];
+  }, []);
+
   const normalizeTranscript = useCallback((text = '') => {
     return text.replace(/\bu\s*m{2,}\b/gi, 'umm').replace(/\s+/g, ' ').trim();
   }, []);
+
+  const buildSpeechHints = useCallback((skills = [], resumeText = '') => {
+    const hints = new Set();
+    const addHint = (value = '') => {
+      const normalized = normalizeTranscript(value);
+      if (normalized.length >= 2) hints.add(normalized);
+    };
+
+    (Array.isArray(skills) ? skills : []).forEach((skill) => {
+      addHint(skill);
+      String(skill || '').split(/[\s/()-]+/).forEach(addHint);
+    });
+
+    (String(resumeText || '').match(/\b[A-Z][A-Z0-9+#.-]{1,7}\b/g) || []).forEach(addHint);
+
+    return [...hints]
+      .filter((hint) => /^[a-z0-9 .+#-]+$/i.test(hint))
+      .slice(0, 40);
+  }, [normalizeTranscript]);
+
+  const applySpeechCorrections = useCallback((text = '') => {
+    const normalizedText = normalizeTranscript(text);
+    if (!normalizedText || speechHints.length === 0) return normalizedText;
+
+    const shortHints = speechHints
+      .map((hint) => normalizeTranscript(hint.toLowerCase()))
+      .filter((hint) => hint.length >= 2 && hint.length <= 8 && !hint.includes(' '));
+
+    if (shortHints.length === 0) return normalizedText;
+
+    return normalizedText
+      .split(/\s+/)
+      .map((token) => {
+        const cleanToken = token.replace(/[^a-z0-9+#.-]/gi, '');
+        if (cleanToken.length < 2 || cleanToken.length > 8) return token;
+        if (shortHints.includes(cleanToken.toLowerCase())) return token;
+
+        let bestMatch = '';
+        let bestDistance = Number.MAX_SAFE_INTEGER;
+        shortHints.forEach((hint) => {
+          const distance = levenshteinDistance(cleanToken, hint);
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestMatch = hint;
+          }
+        });
+
+        if (!bestMatch) return token;
+        const maxDistance = cleanToken.length <= 4 || bestMatch.length <= 4 ? 1 : 2;
+        return bestDistance <= maxDistance ? token.replace(cleanToken, bestMatch) : token;
+      })
+      .join(' ');
+  }, [levenshteinDistance, normalizeTranscript, speechHints]);
 
   const mergeSpeechSegments = useCallback((segments = []) => {
     return segments.reduce((merged, rawSegment) => {
@@ -252,7 +335,7 @@ const AIInterviewPage = () => {
       setProctoringError('');
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false },
       });
 
       const videoTracks = mediaStream.getVideoTracks();
@@ -346,23 +429,49 @@ const AIInterviewPage = () => {
       audioContextRef.current = audioContext;
       analyserRef.current = analyser;
 
-      const freqData = new Uint8Array(analyser.frequencyBinCount);
+      const timeData = new Uint8Array(analyser.fftSize);
       audioMonitorIntervalRef.current = setInterval(() => {
         if (!analyserRef.current) return;
-        if (isListeningRef.current || isSendingRef.current || isSpeakingRef.current || window.speechSynthesis?.speaking || Date.now() < suppressAudioUntilRef.current) return;
-        analyserRef.current.getByteFrequencyData(freqData);
+        if (isListeningRef.current || isSendingRef.current || isSpeakingRef.current || window.speechSynthesis?.speaking || Date.now() < suppressAudioUntilRef.current) {
+          noiseBurstRef.current = { startedAt: 0, lastSeenAt: 0 };
+          return;
+        }
 
-        const avgVolume = freqData.reduce((sum, v) => sum + v, 0) / freqData.length;
-        ambientNoiseRef.current = ambientNoiseRef.current ? ambientNoiseRef.current * 0.92 + avgVolume * 0.08 : avgVolume;
-        const dynamicThreshold = Math.max(10, ambientNoiseRef.current + 5);
-        const peakVolume = Math.max(...freqData);
+        analyserRef.current.getByteTimeDomainData(timeData);
+        const rms = Math.sqrt(
+          timeData.reduce((sum, sample) => {
+            const normalized = (sample - 128) / 128;
+            return sum + (normalized * normalized);
+          }, 0) / timeData.length
+        );
 
-        if ((avgVolume > dynamicThreshold || peakVolume > dynamicThreshold * 2.3) && Date.now() - voiceCooldownRef.current > 4500) {
-          voiceCooldownRef.current = Date.now();
+        ambientNoiseRef.current = ambientNoiseRef.current
+          ? ambientNoiseRef.current * 0.94 + rms * 0.06
+          : rms;
+
+        const dynamicThreshold = Math.max(0.02, ambientNoiseRef.current + 0.018);
+        const now = Date.now();
+
+        if (rms >= dynamicThreshold) {
+          if (!noiseBurstRef.current.startedAt) {
+            noiseBurstRef.current.startedAt = now;
+          }
+          noiseBurstRef.current.lastSeenAt = now;
+        } else if (noiseBurstRef.current.lastSeenAt && now - noiseBurstRef.current.lastSeenAt > 250) {
+          noiseBurstRef.current = { startedAt: 0, lastSeenAt: 0 };
+        }
+
+        if (
+          noiseBurstRef.current.startedAt &&
+          now - noiseBurstRef.current.startedAt >= 700 &&
+          now - voiceCooldownRef.current > 2500
+        ) {
+          voiceCooldownRef.current = now;
+          noiseBurstRef.current = { startedAt: 0, lastSeenAt: 0 };
           handleProctoringViolation({
             type: 'voice_detected',
             severity: 'medium',
-            message: 'Extra voice/noise detected. Please maintain silence and continue the interview alone.',
+            message: 'Sustained extra voice or noise detected. Please continue in a quiet environment.',
           });
         }
       }, 220);
@@ -403,6 +512,12 @@ const AIInterviewPage = () => {
     }
   }, [proctoringMeta, stopDetection]);
 
+  const armAnswerWindow = useCallback((phase = 'primary') => {
+    answerWindowPhaseRef.current = phase;
+    setTimeLeft(phase === 'grace' ? ANSWER_GRACE_SECONDS : ANSWER_WINDOW_SECONDS);
+    setTimerActive(true);
+  }, []);
+
   // Initialize Speech Recognition
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -423,7 +538,7 @@ const AIInterviewPage = () => {
           else if (i >= event.resultIndex) interimSegments.push(transcript);
         }
 
-        const transcript = mergeSpeechSegments([...finalSegments, ...interimSegments]);
+        const transcript = applySpeechCorrections(mergeSpeechSegments([...finalSegments, ...interimSegments]));
         if (transcript) {
           const now = Date.now();
           if (lastSpeechResultRef.current.text === transcript && now - lastSpeechResultRef.current.at < 400) {
@@ -481,7 +596,33 @@ const AIInterviewPage = () => {
 
       recognitionRef.current = recognition;
     }
-  }, [mergeSpeechSegments, normalizeTranscript]);
+  }, [applySpeechCorrections, mergeSpeechSegments, normalizeTranscript]);
+
+  useEffect(() => {
+    if (!recognitionRef.current || speechHints.length === 0) return;
+
+    const recognition = recognitionRef.current;
+    if ('phrases' in recognition) {
+      recognition.phrases = speechHints.map((value) => ({ value, boost: 8 }));
+    }
+
+    const SpeechGrammarList = window.SpeechGrammarList || window.webkitSpeechGrammarList;
+    if (!SpeechGrammarList) return;
+
+    try {
+      const grammarTerms = speechHints
+        .map((hint) => hint.replace(/[;=|<>]/g, ' ').trim())
+        .filter(Boolean)
+        .join(' | ');
+      if (!grammarTerms) return;
+
+      const grammarList = new SpeechGrammarList();
+      grammarList.addFromString(`#JSGF V1.0; grammar resumeTerms; public <term> = ${grammarTerms} ;`, 1);
+      recognition.grammars = grammarList;
+    } catch (error) {
+      console.warn('Speech grammar hints not applied:', error);
+    }
+  }, [speechHints]);
 
   const toggleListening = () => {
     if (isListening) {
@@ -526,8 +667,9 @@ const AIInterviewPage = () => {
     window.speechSynthesis.resume?.();
     isSpeakingRef.current = true;
     suppressAudioUntilRef.current = Date.now() + Math.min(12000, Math.max(3500, text.length * 70));
-    setTimerActive(false); // Stop timer while AI is speaking
-    setTimeLeft(18); // Reset to 18s every time AI speaks
+    setTimerActive(false);
+    setTimeLeft(ANSWER_WINDOW_SECONDS);
+    answerWindowPhaseRef.current = 'primary';
 
     const utterance = new SpeechSynthesisUtterance(text);
 
@@ -540,9 +682,8 @@ const AIInterviewPage = () => {
     utterance.onend = () => {
       isSpeakingRef.current = false;
       suppressAudioUntilRef.current = Date.now() + 1800;
-      // Start 10s timer after AI finishes speaking
       if (!isListeningRef.current && !recognitionRunningRef.current) {
-        setTimerActive(true);
+        armAnswerWindow('primary');
       }
     };
     utterance.onerror = () => {
@@ -562,6 +703,22 @@ const AIInterviewPage = () => {
     } else if (timeLeft === 0 && !isSending) {
       clearInterval(timerRef.current);
       setTimerActive(false);
+
+      if (answerWindowPhaseRef.current === 'primary') {
+        answerWindowPhaseRef.current = 'grace';
+        setSilenceCount((prev) => prev + 1);
+        setChatError('No answer detected yet. Final 6 seconds remaining for this question.');
+        setTimeLeft(ANSWER_GRACE_SECONDS);
+        setTimerActive(true);
+        return () => clearInterval(timerRef.current);
+      }
+
+      handleProctoringViolation({ type: 'response_timeout', severity: 'low', message: 'No response detected within the answer window.' });
+      setChatError('Response timeout recorded. Tap the mic to continue answering.');
+      setSilenceCount(0);
+      setTimeLeft(ANSWER_GRACE_SECONDS);
+      setTimerActive(true);
+      return () => clearInterval(timerRef.current);
 
       const newCount = silenceCount + 1;
       setSilenceCount(newCount);
@@ -585,7 +742,7 @@ const AIInterviewPage = () => {
     }
 
     return () => clearInterval(timerRef.current);
-  }, [timerActive, timeLeft, isSending, handleProctoringViolation, isTTSActive, messages, silenceCount]);
+  }, [timerActive, timeLeft, isSending, handleProctoringViolation]);
 
   // Total Session Timer
   useEffect(() => {
@@ -684,6 +841,7 @@ const AIInterviewPage = () => {
         resumeSkillsRef.current = shuffled;
         usedSkillsRef.current = new Set();
         askedQuestionsRef.current = [];
+        setSpeechHints(buildSpeechHints(ensuredSkills, data.resumeText || ''));
         console.log('Resume skills (shuffled):', shuffled);
 
         setMessages([
@@ -714,9 +872,11 @@ const AIInterviewPage = () => {
   };
 
   const saveInterviewResult = async (historyOverride = null) => {
-    if (isSubmittingFeedback) return;
+    if (isSubmittingFeedback || isSavingInterviewRef.current) return;
+    isSavingInterviewRef.current = true;
     setIsSubmittingFeedback(true);
     setTimerActive(false);
+    answerWindowPhaseRef.current = 'primary';
     window.speechSynthesis?.cancel();
     stopProctoring(true);
 
@@ -747,6 +907,7 @@ const AIInterviewPage = () => {
       setFeedbackSubmitted(true);
       setStep('feedback');
     } finally {
+      isSavingInterviewRef.current = false;
       setIsSubmittingFeedback(false);
     }
   };
@@ -786,8 +947,9 @@ const AIInterviewPage = () => {
     latestTranscriptRef.current = '';
     setIsSending(true);
     setChatError('');
-    setTimerActive(false); // Stop timer when user replies
-    setTimeLeft(18); // Reset timer for next question
+    setTimerActive(false);
+    answerWindowPhaseRef.current = 'primary';
+    setTimeLeft(ANSWER_WINDOW_SECONDS);
 
     try {
       if (!hideFromUI && askedQuestionsRef.current.length >= MAX_INTERVIEW_QUESTIONS) {
@@ -803,7 +965,7 @@ const AIInterviewPage = () => {
       // Find first skill not yet used
       let currentSkill = allSkills.find(s => !used.has(s)) || null;
 
-      if (!currentSkill && allSkills.length > 0) {
+      if (!currentSkill && false) {
         // All skills exhausted — re-shuffle and reset (but this happens only after 10+ questions)
         const reshuffled = [...allSkills].sort(() => Math.random() - 0.5);
         resumeSkillsRef.current = reshuffled;
@@ -812,7 +974,7 @@ const AIInterviewPage = () => {
       }
 
       if (currentSkill) usedSkillsRef.current.add(currentSkill);
-      console.log('Asking about skill:', currentSkill, '| Used so far:', [...usedSkillsRef.current]);
+      console.log('Asking about skill:', currentSkill || '(generic resume topic)', '| Used so far:', [...usedSkillsRef.current]);
 
       const response = await fetch(`${API_URL}/api/ai-interview/chat`, {
         method: 'POST',
@@ -845,10 +1007,7 @@ const AIInterviewPage = () => {
 
         // Only count real questions (not silence-triggered ones)
         if (!hideFromUI) {
-          setQuestionCount((prev) => {
-            const newCount = prev + 1;
-            return newCount;
-          });
+          setQuestionCount(askedQuestionsRef.current.length);
         }
 
         // Speak AI reply
@@ -887,12 +1046,17 @@ const AIInterviewPage = () => {
     keepListeningRef.current = false;
     autoSubmitOnStopRef.current = false;
     latestTranscriptRef.current = '';
+    answerWindowPhaseRef.current = 'primary';
+    isSavingInterviewRef.current = false;
+    noiseBurstRef.current = { startedAt: 0, lastSeenAt: 0 };
     setCurrentViolation(null);
     setAdminProctorMessage(null);
+    setSpeechHints([]);
     setQuestionCount(0);
     setAssessmentResult(null);
     setFeedbackSubmitted(false);
     setFeedbackComment('');
+    setTimeLeft(ANSWER_WINDOW_SECONDS);
     askedQuestionsRef.current = [];
     setProctoringCounts({
       multipleFaces: 0,
@@ -1059,16 +1223,18 @@ const AIInterviewPage = () => {
 
         {/* Upload Step */}
         {step === 'upload' && (
-          <div className="w-full max-w-5xl mx-auto flex flex-col xl:flex-row gap-6 items-stretch flex-1 py-2">
+          <div className="w-full max-w-6xl mx-auto flex flex-col gap-6 items-stretch flex-1 py-2">
             {/* Info Card */}
-            <div className="bg-shnoor-lavender border-2 border-shnoor-mist rounded-xl p-8 w-full xl:w-80 xl:flex-shrink-0 text-center flex flex-col items-center justify-center">
-              <div className="w-16 h-16 bg-shnoor-indigo rounded-full flex items-center justify-center mx-auto mb-4">
-                <Bot size={32} className="text-white" />
+            <div className="bg-shnoor-lavender border-2 border-shnoor-mist rounded-xl p-5 sm:p-6 w-full text-center flex flex-row sm:flex-col items-center sm:items-center gap-4 sm:gap-0 sm:justify-center">
+              <div className="w-14 h-14 sm:w-16 sm:h-16 bg-shnoor-indigo rounded-full flex items-center justify-center flex-shrink-0 sm:mx-auto sm:mb-4">
+                <Bot size={28} className="sm:w-8 sm:h-8 text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-shnoor-navy mb-2">AI Interview</h2>
-              <p className="text-shnoor-indigoMedium text-sm leading-relaxed">
+              <div className="text-left sm:text-center">
+                <h2 className="text-lg sm:text-2xl font-bold text-shnoor-navy mb-1 sm:mb-2">AI Interview</h2>
+                <p className="text-shnoor-indigoMedium text-xs sm:text-sm leading-relaxed max-w-md mx-auto">
                 Upload your resume and our AI interviewer will ask you personalized questions based on your skills and experience.
-              </p>
+                </p>
+              </div>
             </div>
 
             {/* Right column: Upload + Requirements */}
@@ -1077,7 +1243,7 @@ const AIInterviewPage = () => {
             <div className="bg-theme-card border-2 border-theme-border rounded-xl p-6 w-full shadow-[0_8px_30px_rgba(14,14,39,0.06)]">
               <h3 className="text-lg font-bold text-shnoor-navy mb-4">Upload Your Resume</h3>
 
-              <div className="mb-4 border border-theme-border rounded-xl p-3 bg-theme-panel/60">
+              <div className="mb-4 w-full max-w-md mx-auto border border-theme-border rounded-xl p-3 bg-theme-panel/60">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex items-center space-x-2">
                     <Camera size={16} className={isCameraReady ? 'text-shnoor-success' : 'text-shnoor-indigo'} />
@@ -1092,7 +1258,7 @@ const AIInterviewPage = () => {
                     {isCameraReady ? 'Re-check' : 'Enable'}
                   </button>
                 </div>
-                <video ref={previewVideoRef} autoPlay muted playsInline className="w-full h-36 object-cover rounded-lg bg-black" />
+                <video ref={previewVideoRef} autoPlay muted playsInline className="w-full h-64 object-cover rounded-lg bg-black" />
               </div>
 
               {/* File Drop Area */}
@@ -1345,14 +1511,17 @@ const AIInterviewPage = () => {
                   </p>
                 </div>
 
-                <textarea
-                  value={userInput}
-                  readOnly
-                  placeholder="Spoken answer preview..."
-                  rows={2}
-                  className="w-full max-w-2xl px-3 py-2 border border-shnoor-mist rounded-lg focus:outline-none resize-none text-xs text-shnoor-navy placeholder:text-shnoor-mist bg-white"
-                  disabled={isSending}
-                />
+                {userInput ? (
+                  <div className="w-full max-w-2xl bg-shnoor-lavender border border-shnoor-indigo/20 rounded-2xl px-5 py-3 text-sm text-shnoor-navy font-medium text-center shadow-sm">
+                    <p className="text-[11px] text-shnoor-indigoMedium font-bold uppercase tracking-widest mb-1">You said</p>
+                    <p className="leading-relaxed break-words">{userInput}</p>
+                  </div>
+                ) : (
+                  <div className="w-full max-w-2xl rounded-2xl border border-dashed border-shnoor-mist bg-white px-5 py-4 text-center">
+                    <p className="text-[11px] text-shnoor-indigoMedium font-bold uppercase tracking-widest mb-1">Voice Preview</p>
+                    <p className="text-xs text-shnoor-indigoMedium">Your spoken answer will appear here automatically.</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1391,6 +1560,15 @@ const AIInterviewPage = () => {
                   <p className="text-xs text-shnoor-indigoMedium font-semibold mt-1">
                     Auto Rating: <span className="text-shnoor-navy font-bold">{assessmentResult?.rating ?? 0}/5</span>
                   </p>
+                  <div className="mt-3 flex items-center gap-1" aria-label={`Auto rating ${assessmentResult?.rating ?? 0} out of 5`}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        size={18}
+                        className={star <= (assessmentResult?.rating ?? 0) ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'}
+                      />
+                    ))}
+                  </div>
                   <p className="text-xs text-shnoor-indigoMedium font-semibold mt-1">
                     Decision: <span className="text-shnoor-navy font-bold">{assessmentResult?.shortlisted ? 'Auto-shortlisted' : 'Disqualified'}</span>
                   </p>

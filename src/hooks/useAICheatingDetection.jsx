@@ -74,12 +74,13 @@ export const useAICheatingDetection = (onViolation) => {
   const detectionActiveRef = useRef(false);
   const multipleFaceStreakRef = useRef(0);
   const phoneDetectionStreakRef = useRef(0);
+  const objectDetectionStreakRef = useRef(0);
 
   // Configuration
-  const DETECTION_INTERVAL = 420;
-  const NO_FACE_THRESHOLD = 1000;
-  const VIOLATION_COOLDOWN = 2500;
-  const FACE_CONFIDENCE_THRESHOLD = 0.42;
+  const DETECTION_INTERVAL = 260;
+  const NO_FACE_THRESHOLD = 900;
+  const VIOLATION_COOLDOWN = 1800;
+  const FACE_CONFIDENCE_THRESHOLD = 0.3;
 
   // Load MediaPipe models with retry logic
   const loadModels = useCallback(async () => {
@@ -141,7 +142,7 @@ export const useAICheatingDetection = (onViolation) => {
     
     if (faceCount > 1) {
       multipleFaceStreakRef.current += 1;
-      if (multipleFaceStreakRef.current < 2) {
+      if (multipleFaceStreakRef.current < 1) {
         return null;
       }
 
@@ -229,12 +230,12 @@ export const useAICheatingDetection = (onViolation) => {
         categoryName.includes('cell phone') ||
         categoryName.includes('mobile phone') ||
         categoryName.includes('phone');
-      return isPhoneLabel && score >= 0.5;
+      return isPhoneLabel && score >= 0.6;
     });
 
     if (phoneDetections.length > 0) {
       phoneDetectionStreakRef.current += 1;
-      if (phoneDetectionStreakRef.current < 1) {
+      if (phoneDetectionStreakRef.current < 2) {
         return null;
       }
 
@@ -267,10 +268,15 @@ export const useAICheatingDetection = (onViolation) => {
     const suspiciousDetections = objectDetections.detections.filter((det) => {
       const categoryName = det?.categories?.[0]?.categoryName?.toLowerCase() || '';
       const score = det?.categories?.[0]?.score || 0;
-      return suspiciousLabels.some((label) => categoryName.includes(label)) && score >= 0.45;
+      return suspiciousLabels.some((label) => categoryName.includes(label)) && score >= 0.55;
     });
 
     if (suspiciousDetections.length > 0) {
+      objectDetectionStreakRef.current += 1;
+      if (objectDetectionStreakRef.current < 2) {
+        return null;
+      }
+
       const now = Date.now();
       const lastTime = lastViolationTimeRef.current['object_detected'] || 0;
 
@@ -286,6 +292,8 @@ export const useAICheatingDetection = (onViolation) => {
           message: `${objectName} detected (${confidence}% confidence) near camera`
         };
       }
+    } else {
+      objectDetectionStreakRef.current = 0;
     }
 
     return null;
@@ -347,13 +355,17 @@ export const useAICheatingDetection = (onViolation) => {
       const faceDetections = faceDetectorRef.current.detectForVideo(video, now);
       const objectDetections = objectDetectorRef.current.detectForVideo(video, now);
       
-      const faceCount = faceDetections.detections.length;
+      const validFaceDetections = (faceDetections.detections || []).filter((face) => {
+        const confidence = face?.categories?.[0]?.score || 0;
+        return confidence >= FACE_CONFIDENCE_THRESHOLD;
+      });
+      const faceCount = validFaceDetections.length;
       
       // Only log when face count is abnormal (not 1)
       if (faceCount !== 1) {
         console.log(`[AI] 👥 Face count: ${faceCount}`);
-        if (faceDetections.detections.length > 0) {
-          faceDetections.detections.forEach((face, idx) => {
+        if (validFaceDetections.length > 0) {
+          validFaceDetections.forEach((face, idx) => {
             const confidence = face.categories?.[0]?.score || 0;
             console.log(`[AI]   Face ${idx + 1}: confidence ${(confidence * 100).toFixed(1)}%`);
           });
@@ -468,6 +480,7 @@ export const useAICheatingDetection = (onViolation) => {
     noFaceDurationRef.current = 0;
     multipleFaceStreakRef.current = 0;
     phoneDetectionStreakRef.current = 0;
+    objectDetectionStreakRef.current = 0;
     lastViolationTimeRef.current = {};
     detectionActiveRef.current = false;
   }, []);

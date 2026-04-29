@@ -487,7 +487,7 @@ const LiveProctoring = () => {
 
                     {showAICounts && (
                       <div className="mt-3 p-2 rounded-lg bg-shnoor-warningLight border border-shnoor-warning/50 text-[11px] text-shnoor-navy">
-                        Faces: {aiViolations.multipleFaces || 0} | No face: {aiViolations.noFace || 0} | Phone: {aiViolations.phoneDetected || 0} | Object: {aiViolations.objectDetected || 0} | Voice: {aiViolations.voiceDetected || 0} | Tab: {aiViolations.tabSwitch || 0}
+                        Faces: {aiViolations.multipleFaces || 0} | No face: {aiViolations.noFace || 0} | Phone: {aiViolations.phoneDetected || 0} | Object: {aiViolations.objectDetected || 0} | Voice: {aiViolations.voiceDetected || 0} | Tab: {aiViolations.tabSwitch || 0} | Timeout: {aiViolations.responseTimeout || 0}
                       </div>
                     )}
 

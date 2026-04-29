@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BrainCircuit, ArrowLeft, Eye, Star, User, Calendar, FileText, Loader2, X, AlertTriangle, Download, CheckCircle, XCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import InterviewSchedule from './InterviewSchedule';
 
 // Returns true if resume text looks like raw PDF binary/metadata rather than human-readable content
 const isGarbledResumeText = (text = '') => {
@@ -49,6 +50,17 @@ const evaluateAnswer = (answer = '') => {
   return 'basic';
 };
 
+const parseJsonField = (value, fallback) => {
+  if (typeof value !== 'string') return value || fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
+
+const getDecisionLabel = (shortlisted) => (shortlisted ? 'Auto-shortlisted' : 'Disqualified');
+
 const EVAL_META = {
   detailed: { label: 'Detailed Answer', color: 'bg-blue-100 text-blue-700 border-blue-200', dot: 'bg-blue-500' },
   basic: { label: 'Basic Answer', color: 'bg-indigo-100 text-indigo-700 border-indigo-200', dot: 'bg-indigo-500' },
@@ -56,7 +68,46 @@ const EVAL_META = {
   not_answered: { label: 'Not Answered / Skipped', color: 'bg-red-100 text-red-700 border-red-200', dot: 'bg-red-500' },
 };
 
-const buildSummary = (chatHistory = []) => {
+const buildSummary = (chatHistory = [], scoredQuestions = [], ignoredQuestions = []) => {
+  const normalizedScored = Array.isArray(scoredQuestions) ? scoredQuestions : [];
+  const normalizedIgnored = Array.isArray(ignoredQuestions) ? ignoredQuestions : [];
+
+  if (normalizedScored.length > 0 || normalizedIgnored.length > 0) {
+    const pairs = normalizedScored.map((item, index) => ({
+      question: item?.question || '',
+      answer: item?.answer || '',
+      skill: detectSkill(item?.question || ''),
+      eval: item?.verdict === 'correct'
+        ? 'detailed'
+        : item?.verdict === 'partially_correct'
+          ? 'partial'
+          : 'not_answered',
+      number: item?.number || index + 1,
+    }));
+
+    if (pairs.length === 0 && normalizedIgnored.length === 0) return null;
+
+    const groups = {};
+    pairs.forEach((pair) => {
+      if (!groups[pair.skill]) groups[pair.skill] = [];
+      groups[pair.skill].push(pair);
+    });
+
+    const totalQ = normalizedScored.length + normalizedIgnored.length;
+    const answered = normalizedScored.filter((item) => item?.verdict !== 'incorrect' || (item?.answer || '').trim().length > 0).length;
+    const detailed = normalizedScored.filter((item) => item?.verdict === 'correct').length;
+    const notAns = normalizedScored.filter((item) => item?.verdict === 'incorrect').length;
+
+    let overallGrade = 'Poor';
+    let gradeColor = 'text-red-700 bg-red-50 border-red-200';
+    const pct = normalizedScored.length > 0 ? answered / normalizedScored.length : 0;
+    if (pct >= 0.8) { overallGrade = 'Excellent'; gradeColor = 'text-green-700 bg-green-50 border-green-200'; }
+    else if (pct >= 0.6) { overallGrade = 'Good'; gradeColor = 'text-blue-700 bg-blue-50 border-blue-200'; }
+    else if (pct >= 0.4) { overallGrade = 'Average'; gradeColor = 'text-amber-700 bg-amber-50 border-amber-200'; }
+
+    return { pairs, groups, totalQ, answered, detailed, notAns, overallGrade, gradeColor };
+  }
+
   if (!Array.isArray(chatHistory) || chatHistory.length === 0) return null;
 
   const pairs = [];
@@ -105,6 +156,8 @@ const AIInterviewResults = ({ isTab = false }) => {
   const [loading, setLoading] = useState(true);
   const [selectedInterview, setSelectedInterview] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleStudent, setScheduleStudent] = useState(null);
 
   useEffect(() => {
     fetchResults();
@@ -145,15 +198,6 @@ const AIInterviewResults = ({ isTab = false }) => {
         if (!Array.isArray(normalizedChatHistory)) {
           normalizedChatHistory = [];
         }
-
-        const parseJsonField = (value, fallback) => {
-          if (typeof value !== 'string') return value || fallback;
-          try {
-            return JSON.parse(value);
-          } catch {
-            return fallback;
-          }
-        };
 
         setSelectedInterview({
           ...interview,
@@ -200,6 +244,16 @@ const AIInterviewResults = ({ isTab = false }) => {
       console.error('Failed to download AI interview report:', err);
       alert('Failed to download report.');
     }
+  };
+
+  const openScheduleModal = () => {
+    if (!selectedInterview) return;
+    setScheduleStudent({
+      id: selectedInterview.student_id || selectedInterview.roll_number || '',
+      name: selectedInterview.full_name || selectedInterview.student_name || 'Student',
+      email: selectedInterview.email || ''
+    });
+    setShowScheduleModal(true);
   };
 
   const renderStars = (rating) => {
@@ -249,7 +303,7 @@ const AIInterviewResults = ({ isTab = false }) => {
         'College/Institute': row.institute || '-',
         'Correct Answers': `${row.correct_count || 0}/${row.total_scored_questions || 0}`,
         'Rating': `${row.rating || 0}/5`,
-        'Status': row.shortlisted ? 'Auto-shortlisted' : 'Disqualified',
+        'Status': getDecisionLabel(row.shortlisted),
         'No Face': counts.noFace || 0,
         'Multiple Faces': counts.multipleFaces || 0,
         'Phone Detected': counts.phoneDetected || 0,
@@ -386,7 +440,7 @@ const AIInterviewResults = ({ isTab = false }) => {
                           : 'bg-shnoor-lavender text-shnoor-indigoMedium border-shnoor-mist'
                       }`}>
                         {interview.shortlisted ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                        {interview.shortlisted ? 'Shortlisted' : 'Reviewed'}
+                        {interview.shortlisted ? 'Shortlisted' : 'Disqualified'}
                       </span>
                     </td>
 
@@ -430,6 +484,15 @@ const AIInterviewResults = ({ isTab = false }) => {
                   <Download size={13} />
                   <span>Download Report</span>
                 </button>
+                {selectedInterview?.shortlisted && (selectedInterview.student_id || selectedInterview.roll_number) && (
+                  <button
+                    onClick={openScheduleModal}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-white text-shnoor-indigo hover:bg-shnoor-lavender text-xs sm:text-sm font-bold transition-colors"
+                  >
+                    <Calendar size={13} />
+                    <span>Schedule Interview</span>
+                  </button>
+                )}
                 <button
                   onClick={() => setSelectedInterview(null)}
                   className="text-white hover:bg-white/20 rounded-full p-2 transition-colors"
@@ -458,7 +521,11 @@ const AIInterviewResults = ({ isTab = false }) => {
                 </div>
 
                 {(() => {
-                  const summary = buildSummary(selectedInterview.chat_history);
+                  const summary = buildSummary(
+                    selectedInterview.chat_history,
+                    selectedInterview.scored_questions,
+                    selectedInterview.ignored_questions
+                  );
                   if (!summary) return null;
                   return (
                     <div className="p-6 border-b border-shnoor-mist/30 space-y-5">
@@ -564,7 +631,7 @@ const AIInterviewResults = ({ isTab = false }) => {
                           </div>
                           <div className="bg-shnoor-lavender/60 rounded-lg p-3">
                             <p className="uppercase text-[10px] font-bold text-shnoor-indigoMedium">Decision</p>
-                            <p className="text-sm font-bold">{selectedInterview.shortlisted ? 'Auto-shortlisted' : 'Disqualified'}</p>
+                            <p className="text-sm font-bold">{getDecisionLabel(selectedInterview.shortlisted)}</p>
                           </div>
                         </div>
                       </div>
@@ -689,6 +756,24 @@ const AIInterviewResults = ({ isTab = false }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {showScheduleModal && scheduleStudent && (
+        <InterviewSchedule
+          student={scheduleStudent}
+          onClose={() => {
+            setShowScheduleModal(false);
+            setScheduleStudent(null);
+          }}
+          onScheduled={() => {
+            setShowScheduleModal(false);
+            setScheduleStudent(null);
+            fetchResults();
+            if (selectedInterview?.id) {
+              fetchDetail(selectedInterview.id);
+            }
+          }}
+        />
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { apiFetch } from '../../config/api';
 
@@ -7,7 +7,56 @@ const InterviewSchedule = ({ student, testId, applicationId, onClose, onSchedule
     scheduled_time: '',
     duration: 60
   });
+  const [availableTests, setAvailableTests] = useState([]);
+  const [selectedTestId, setSelectedTestId] = useState(testId ? String(testId) : '');
+  const [loadingTests, setLoadingTests] = useState(false);
+  const [testError, setTestError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (testId) {
+      setSelectedTestId(String(testId));
+    }
+  }, [testId]);
+
+  useEffect(() => {
+    if (testId) return;
+
+    let cancelled = false;
+    const loadTests = async () => {
+      setLoadingTests(true);
+      setTestError('');
+      try {
+        const response = await apiFetch('api/tests', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+          }
+        });
+        const data = await response.json();
+        if (!cancelled && data.success) {
+          const tests = Array.isArray(data.tests) ? data.tests : [];
+          setAvailableTests(tests);
+          setSelectedTestId((prev) => prev || (tests.length > 0 ? String(tests[0].id) : ''));
+        } else if (!cancelled) {
+          setTestError(data.message || 'Failed to load tests');
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Load tests error:', error);
+          setTestError('Failed to load tests');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingTests(false);
+        }
+      }
+    };
+
+    loadTests();
+    return () => {
+      cancelled = true;
+    };
+  }, [testId]);
 
   // Convert IST datetime-local to UTC ISO string (same as test scheduling)
   const convertISTToUTC = (dateTimeString) => {
@@ -30,8 +79,15 @@ const InterviewSchedule = ({ student, testId, applicationId, onClose, onSchedule
 
     console.log('=== INTERVIEW SCHEDULE SUBMIT ===');
     console.log('Student:', student);
-    console.log('Test ID:', testId);
+    console.log('Test ID:', testId || selectedTestId);
     console.log('Form Data (IST):', formData);
+
+    const finalTestId = testId || selectedTestId;
+    if (!finalTestId) {
+      setTestError('Please select a test first.');
+      setLoading(false);
+      return;
+    }
 
     try {
       // Convert IST to UTC before sending to backend (same as test scheduling)
@@ -42,7 +98,7 @@ const InterviewSchedule = ({ student, testId, applicationId, onClose, onSchedule
 
       const requestBody = {
         student_id: student.id,
-        test_id: testId,
+        test_id: finalTestId,
         application_id: applicationId || null,
         scheduled_time: scheduledTimeUTC,
         duration: formData.duration
@@ -90,6 +146,30 @@ const InterviewSchedule = ({ student, testId, applicationId, onClose, onSchedule
           <p className="text-sm text-gray-600">Student: <span className="font-semibold">{student.name}</span></p>
           <p className="text-sm text-gray-600">Email: <span className="font-semibold">{student.email}</span></p>
         </div>
+
+        {!testId && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Interview Test
+            </label>
+            <select
+              value={selectedTestId}
+              onChange={(e) => setSelectedTestId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loadingTests}
+              required
+            >
+              <option value="">Select a test</option>
+              {availableTests.map((test) => (
+                <option key={test.id} value={test.id}>
+                  {test.title} {test.status ? `(${test.status})` : ''}
+                </option>
+              ))}
+            </select>
+            {loadingTests && <p className="text-xs text-gray-500 mt-1">Loading tests...</p>}
+            {testError && <p className="text-xs text-red-600 mt-1">{testError}</p>}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
