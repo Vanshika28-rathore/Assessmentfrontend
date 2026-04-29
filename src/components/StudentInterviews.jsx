@@ -33,7 +33,7 @@ const StudentInterviews = () => {
   const initializeSocket = () => {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     const socket = io(socketUrl, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 3000,
@@ -426,3 +426,4 @@ const StudentInterviews = () => {
 };
 
 export default StudentInterviews;
+

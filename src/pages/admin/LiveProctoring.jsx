@@ -104,7 +104,7 @@ const LiveProctoring = () => {
 
     // Prefer WebSocket in production so multi-instance deployments do not break long-polling sessions.
     const socket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
@@ -583,3 +583,4 @@ const LiveProctoring = () => {
 };
 
 export default LiveProctoring;
+

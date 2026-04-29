@@ -365,7 +365,7 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
     }
 
     const socket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       reconnection: true,
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,
@@ -783,3 +783,4 @@ export const useProctoringWithAI = (onCameraLost, onAIViolation, onMessageReceiv
     acknowledgeMessage,
   };
 };
+
