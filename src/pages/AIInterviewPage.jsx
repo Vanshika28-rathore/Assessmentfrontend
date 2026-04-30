@@ -14,6 +14,22 @@ const MAX_INTERVIEW_QUESTIONS = 20;
 const ANSWER_WINDOW_SECONDS = 18;
 const ANSWER_GRACE_SECONDS = 6;
 
+const isTechnicalQuestionText = (question = '') => {
+  const q = String(question || '').trim().toLowerCase();
+  if (!q || !q.endsWith('?')) return false;
+  const blocked = [
+    'ready', 'let us begin', "let's begin", 'how are you', 'tell me about yourself',
+    'resume', 'document', 'pdf generation', 'reportlab'
+  ];
+  if (blocked.some((phrase) => q.includes(phrase))) return false;
+  const signals = [
+    'how ', 'what ', 'why ', 'when ', 'which ', 'can ', 'could ', 'would ', 'explain ', 'describe ',
+    'implement', 'debug', 'optimize', 'design', 'api', 'database', 'sql', 'react', 'javascript',
+    'python', 'node', 'express', 'algorithm', 'state', 'cache', 'webpack', 'router'
+  ];
+  return signals.some((signal) => q.includes(signal));
+};
+
 const AIInterviewPage = () => {
   const navigate = useNavigate();
   const studentName = localStorage.getItem('studentName') || 'Student';
@@ -92,11 +108,15 @@ const AIInterviewPage = () => {
   const lastTabViolationRef = useRef(0);
   const voiceCooldownRef = useRef(0);
   const ambientNoiseRef = useRef(0);
+  const ambientVoiceEnergyRef = useRef(0);
+  const audioCalibrationRef = useRef({ startedAt: 0, sampleCount: 0 });
   const noiseBurstRef = useRef({ startedAt: 0, lastSeenAt: 0 });
   const violationEventsRef = useRef([]);
   const isSpeakingRef = useRef(false);
   const answerWindowPhaseRef = useRef('primary');
   const isSavingInterviewRef = useRef(false);
+  const speechPhraseSupportRef = useRef(true);
+  const speechPhraseWarningShownRef = useRef(false);
 
   const proctoringMeta = useMemo(() => ({
     studentId: String(studentId || 'unknown-student'),
@@ -421,38 +441,93 @@ const AIInterviewPage = () => {
   const startAudioMonitoring = useCallback(async () => {
     if (!streamRef.current || audioMonitorIntervalRef.current) return;
     try {
+      const audioTracks = streamRef.current.getAudioTracks?.() || [];
+      if (!audioTracks.some((track) => track.readyState === 'live' && track.enabled)) {
+        console.warn('Audio monitor skipped: no live microphone track found.');
+        return;
+      }
+
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume().catch(() => {});
+      }
       const source = audioContext.createMediaStreamSource(streamRef.current);
       const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 2048;
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.7;
       source.connect(analyser);
       audioContextRef.current = audioContext;
       analyserRef.current = analyser;
+      audioCalibrationRef.current = { startedAt: Date.now(), sampleCount: 0 };
+      ambientNoiseRef.current = 0;
+      ambientVoiceEnergyRef.current = 0;
+      noiseBurstRef.current = { startedAt: 0, lastSeenAt: 0 };
 
       const timeData = new Uint8Array(analyser.fftSize);
+      const frequencyData = new Uint8Array(analyser.frequencyBinCount);
+      const speechBandStart = Math.max(1, Math.floor(85 / (audioContext.sampleRate / analyser.fftSize)));
+      const speechBandEnd = Math.min(
+        analyser.frequencyBinCount - 1,
+        Math.floor(2550 / (audioContext.sampleRate / analyser.fftSize))
+      );
       audioMonitorIntervalRef.current = setInterval(() => {
         if (!analyserRef.current) return;
-        if (isListeningRef.current || isSendingRef.current || isSpeakingRef.current || window.speechSynthesis?.speaking || Date.now() < suppressAudioUntilRef.current) {
+        if (audioContextRef.current?.state === 'suspended') {
+          audioContextRef.current.resume().catch(() => {});
+        }
+        if (isSendingRef.current || isSpeakingRef.current || window.speechSynthesis?.speaking || Date.now() < suppressAudioUntilRef.current) {
           noiseBurstRef.current = { startedAt: 0, lastSeenAt: 0 };
           return;
         }
 
+        const now = Date.now();
         analyserRef.current.getByteTimeDomainData(timeData);
+        analyserRef.current.getByteFrequencyData(frequencyData);
         const rms = Math.sqrt(
           timeData.reduce((sum, sample) => {
             const normalized = (sample - 128) / 128;
             return sum + (normalized * normalized);
           }, 0) / timeData.length
         );
+        const speechBand = frequencyData.slice(speechBandStart, speechBandEnd);
+        const speechEnergy = speechBand.length
+          ? speechBand.reduce((sum, value) => sum + value, 0) / speechBand.length
+          : 0;
 
-        ambientNoiseRef.current = ambientNoiseRef.current
-          ? ambientNoiseRef.current * 0.94 + rms * 0.06
-          : rms;
+        const calibration = audioCalibrationRef.current;
+        if (calibration.sampleCount < 8 || now - calibration.startedAt < 1400) {
+          calibration.sampleCount += 1;
+          ambientNoiseRef.current = ambientNoiseRef.current
+            ? ambientNoiseRef.current * 0.75 + rms * 0.25
+            : rms;
+          ambientVoiceEnergyRef.current = ambientVoiceEnergyRef.current
+            ? ambientVoiceEnergyRef.current * 0.75 + speechEnergy * 0.25
+            : speechEnergy;
+          noiseBurstRef.current = { startedAt: 0, lastSeenAt: 0 };
+          return;
+        }
 
-        const dynamicThreshold = Math.max(0.02, ambientNoiseRef.current + 0.018);
-        const now = Date.now();
+        const dynamicThreshold = Math.max(0.01, ambientNoiseRef.current * 1.45, ambientNoiseRef.current + 0.006);
+        const speechThreshold = Math.max(10, ambientVoiceEnergyRef.current * 1.35, ambientVoiceEnergyRef.current + 6);
+        const isSpeechLikeAudio = speechEnergy >= speechThreshold && rms >= Math.max(dynamicThreshold * 0.82, 0.012);
+        const isLoudBurst = rms >= Math.max(dynamicThreshold * 1.18, 0.018);
+        const recentRecognizedSpeech = recognitionRunningRef.current && (now - Number(lastSpeechResultRef.current?.at || 0) < 900);
 
-        if (rms >= dynamicThreshold) {
+        if (!isSpeechLikeAudio && !isLoudBurst) {
+          ambientNoiseRef.current = ambientNoiseRef.current
+            ? ambientNoiseRef.current * 0.92 + rms * 0.08
+            : rms;
+          ambientVoiceEnergyRef.current = ambientVoiceEnergyRef.current
+            ? ambientVoiceEnergyRef.current * 0.9 + speechEnergy * 0.1
+            : speechEnergy;
+        }
+
+        if (recentRecognizedSpeech && !isLoudBurst && speechEnergy < speechThreshold * 1.25) {
+          noiseBurstRef.current = { startedAt: 0, lastSeenAt: 0 };
+          return;
+        }
+
+        if (isSpeechLikeAudio || isLoudBurst) {
           if (!noiseBurstRef.current.startedAt) {
             noiseBurstRef.current.startedAt = now;
           }
@@ -463,8 +538,8 @@ const AIInterviewPage = () => {
 
         if (
           noiseBurstRef.current.startedAt &&
-          now - noiseBurstRef.current.startedAt >= 700 &&
-          now - voiceCooldownRef.current > 2500
+          now - noiseBurstRef.current.startedAt >= (isLoudBurst ? 320 : 520) &&
+          now - voiceCooldownRef.current > 1500
         ) {
           voiceCooldownRef.current = now;
           noiseBurstRef.current = { startedAt: 0, lastSeenAt: 0 };
@@ -497,6 +572,10 @@ const AIInterviewPage = () => {
       audioContextRef.current = null;
       analyserRef.current = null;
     }
+    ambientNoiseRef.current = 0;
+    ambientVoiceEnergyRef.current = 0;
+    audioCalibrationRef.current = { startedAt: 0, sampleCount: 0 };
+    noiseBurstRef.current = { startedAt: 0, lastSeenAt: 0 };
 
     if (socketRef.current) {
       socketRef.current.emit('student:leave-proctoring', proctoringMeta);
@@ -555,6 +634,29 @@ const AIInterviewPage = () => {
       };
 
       recognition.onerror = (event) => {
+        if (event.error === 'phrases-not-supported') {
+          speechPhraseSupportRef.current = false;
+          try {
+            if ('phrases' in recognition) recognition.phrases = [];
+          } catch {
+            // Ignore phrase cleanup failures and continue without hints.
+          }
+          speechPhraseWarningShownRef.current = true;
+          recognitionRunningRef.current = false;
+          if (keepListeningRef.current) {
+            window.setTimeout(() => {
+              try {
+                if (keepListeningRef.current && !recognitionRunningRef.current) {
+                  recognition.start();
+                }
+              } catch {
+                setIsListening(false);
+                keepListeningRef.current = false;
+              }
+            }, 200);
+          }
+          return;
+        }
         if (event.error !== 'aborted' && event.error !== 'no-speech') {
           console.error('Speech recognition error', event.error);
         }
@@ -602,8 +704,21 @@ const AIInterviewPage = () => {
     if (!recognitionRef.current || speechHints.length === 0) return;
 
     const recognition = recognitionRef.current;
-    if ('phrases' in recognition) {
-      recognition.phrases = speechHints.map((value) => ({ value, boost: 8 }));
+    if (speechPhraseSupportRef.current && 'phrases' in recognition) {
+      try {
+        const SpeechRecognitionPhrase = window.SpeechRecognitionPhrase || window.webkitSpeechRecognitionPhrase;
+        if (SpeechRecognitionPhrase) {
+          const phrases = speechHints
+            .map((value) => String(value || '').trim())
+            .filter(Boolean)
+            .map((value) => new SpeechRecognitionPhrase(value, 8));
+          if (phrases.length > 0) {
+            recognition.phrases = phrases;
+          }
+        }
+      } catch (error) {
+        console.warn('Speech phrase hints not applied:', error);
+      }
     }
 
     const SpeechGrammarList = window.SpeechGrammarList || window.webkitSpeechGrammarList;
@@ -952,7 +1067,8 @@ const AIInterviewPage = () => {
     setTimeLeft(ANSWER_WINDOW_SECONDS);
 
     try {
-      if (!hideFromUI && askedQuestionsRef.current.length >= MAX_INTERVIEW_QUESTIONS) {
+      const technicalAskedCount = askedQuestionsRef.current.filter(isTechnicalQuestionText).length;
+      if (!hideFromUI && technicalAskedCount >= MAX_INTERVIEW_QUESTIONS) {
         const finalHistory = [...messages.filter(m => !m.hidden), userMessage].map(m => ({ role: m.role, content: m.content }));
         await saveInterviewResult(finalHistory);
         return;
@@ -1007,7 +1123,7 @@ const AIInterviewPage = () => {
 
         // Only count real questions (not silence-triggered ones)
         if (!hideFromUI) {
-          setQuestionCount(askedQuestionsRef.current.length);
+          setQuestionCount(askedQuestionsRef.current.filter(isTechnicalQuestionText).length);
         }
 
         // Speak AI reply
@@ -1048,6 +1164,9 @@ const AIInterviewPage = () => {
     latestTranscriptRef.current = '';
     answerWindowPhaseRef.current = 'primary';
     isSavingInterviewRef.current = false;
+    ambientNoiseRef.current = 0;
+    ambientVoiceEnergyRef.current = 0;
+    audioCalibrationRef.current = { startedAt: 0, sampleCount: 0 };
     noiseBurstRef.current = { startedAt: 0, lastSeenAt: 0 };
     setCurrentViolation(null);
     setAdminProctorMessage(null);

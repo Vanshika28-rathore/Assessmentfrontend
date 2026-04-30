@@ -81,6 +81,10 @@ export const useAICheatingDetection = (onViolation) => {
   const NO_FACE_THRESHOLD = 900;
   const VIOLATION_COOLDOWN = 1800;
   const FACE_CONFIDENCE_THRESHOLD = 0.3;
+  const MIN_FACE_AREA_RATIO = 0.015;
+  const FACE_OVERLAP_IOU_THRESHOLD = 0.62;
+  const FACE_CENTER_DISTANCE_RATIO = 0.18;
+  const MULTI_FACE_STREAK_THRESHOLD = 3;
 
   // Load MediaPipe models with retry logic
   const loadModels = useCallback(async () => {
@@ -128,12 +132,74 @@ export const useAICheatingDetection = (onViolation) => {
     }
   }, []);
 
-  const detectMultipleFaces = useCallback((detections) => {
-    const validFaceDetections = (detections.detections || []).filter((det) => {
-      const score = det?.categories?.[0]?.score || 0;
-      return score >= FACE_CONFIDENCE_THRESHOLD;
+  const getFaceBox = useCallback((detection) => {
+    const box = detection?.boundingBox;
+    if (!box) return null;
+    const x = Number(box.originX || 0);
+    const y = Number(box.originY || 0);
+    const width = Number(box.width || 0);
+    const height = Number(box.height || 0);
+    if (width <= 0 || height <= 0) return null;
+    return { x, y, width, height };
+  }, []);
+
+  const getDistinctFaceDetections = useCallback((detections, videoElement) => {
+    const rawDetections = Array.isArray(detections?.detections) ? detections.detections : [];
+    const videoWidth = Number(videoElement?.videoWidth || 0);
+    const videoHeight = Number(videoElement?.videoHeight || 0);
+    const videoArea = videoWidth > 0 && videoHeight > 0 ? videoWidth * videoHeight : 0;
+
+    const filtered = rawDetections
+      .map((detection) => {
+        const score = detection?.categories?.[0]?.score || 0;
+        const box = getFaceBox(detection);
+        if (score < FACE_CONFIDENCE_THRESHOLD || !box) return null;
+
+        const area = box.width * box.height;
+        const areaRatio = videoArea > 0 ? area / videoArea : 1;
+        if (videoArea > 0 && areaRatio < MIN_FACE_AREA_RATIO) return null;
+
+        return { detection, score, box };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score);
+
+    const distinct = [];
+    filtered.forEach((candidate) => {
+      const isDuplicate = distinct.some((kept) => {
+        const intersectLeft = Math.max(candidate.box.x, kept.box.x);
+        const intersectTop = Math.max(candidate.box.y, kept.box.y);
+        const intersectRight = Math.min(candidate.box.x + candidate.box.width, kept.box.x + kept.box.width);
+        const intersectBottom = Math.min(candidate.box.y + candidate.box.height, kept.box.y + kept.box.height);
+        const intersectWidth = Math.max(0, intersectRight - intersectLeft);
+        const intersectHeight = Math.max(0, intersectBottom - intersectTop);
+        const intersection = intersectWidth * intersectHeight;
+        const union = (candidate.box.width * candidate.box.height) + (kept.box.width * kept.box.height) - intersection;
+        const iou = union > 0 ? intersection / union : 0;
+
+        const candidateCenterX = candidate.box.x + (candidate.box.width / 2);
+        const candidateCenterY = candidate.box.y + (candidate.box.height / 2);
+        const keptCenterX = kept.box.x + (kept.box.width / 2);
+        const keptCenterY = kept.box.y + (kept.box.height / 2);
+        const dx = candidateCenterX - keptCenterX;
+        const dy = candidateCenterY - keptCenterY;
+        const centerDistance = Math.sqrt((dx * dx) + (dy * dy));
+        const normalizationBase = Math.max(candidate.box.width, candidate.box.height, kept.box.width, kept.box.height, 1);
+        const distanceRatio = centerDistance / normalizationBase;
+
+        return iou >= FACE_OVERLAP_IOU_THRESHOLD || distanceRatio <= FACE_CENTER_DISTANCE_RATIO;
+      });
+
+      if (!isDuplicate) {
+        distinct.push(candidate);
+      }
     });
-    const faceCount = validFaceDetections.length;
+
+    return distinct.map((item) => item.detection);
+  }, [FACE_CONFIDENCE_THRESHOLD, FACE_CENTER_DISTANCE_RATIO, FACE_OVERLAP_IOU_THRESHOLD, MIN_FACE_AREA_RATIO, getFaceBox]);
+
+  const detectMultipleFaces = useCallback((distinctFaces) => {
+    const faceCount = distinctFaces.length;
     
     // Always log face count for debugging
     if (faceCount !== 1) {
@@ -142,7 +208,7 @@ export const useAICheatingDetection = (onViolation) => {
     
     if (faceCount > 1) {
       multipleFaceStreakRef.current += 1;
-      if (multipleFaceStreakRef.current < 1) {
+      if (multipleFaceStreakRef.current < MULTI_FACE_STREAK_THRESHOLD) {
         return null;
       }
 
@@ -167,13 +233,10 @@ export const useAICheatingDetection = (onViolation) => {
     }
 
     return null;
-  }, []);
+  }, [MULTI_FACE_STREAK_THRESHOLD]);
 
-  const detectNoFace = useCallback((detections) => {
-    const faceCount = (detections.detections || []).filter((det) => {
-      const score = det?.categories?.[0]?.score || 0;
-      return score >= FACE_CONFIDENCE_THRESHOLD;
-    }).length;
+  const detectNoFace = useCallback((distinctFaces) => {
+    const faceCount = distinctFaces.length;
     
     if (faceCount === 0) {
       if (!noFaceTimerRef.current) {
@@ -218,7 +281,7 @@ export const useAICheatingDetection = (onViolation) => {
     }
 
     return null;
-  }, [FACE_CONFIDENCE_THRESHOLD]);
+  }, []);
 
   const detectPhone = useCallback((objectDetections) => {
     if (!objectDetections || !objectDetections.detections) return null;
@@ -299,10 +362,10 @@ export const useAICheatingDetection = (onViolation) => {
     return null;
   }, []);
 
-  const detectLookingDown = useCallback((faceDetections) => {
-    if (faceDetections.detections.length !== 1) return null;
+  const detectLookingDown = useCallback((distinctFaces) => {
+    if (distinctFaces.length !== 1) return null;
 
-    const detection = faceDetections.detections[0];
+    const detection = distinctFaces[0];
     const keypoints = detection.keypoints;
 
     if (keypoints && keypoints.length >= 6) {
@@ -354,18 +417,14 @@ export const useAICheatingDetection = (onViolation) => {
       
       const faceDetections = faceDetectorRef.current.detectForVideo(video, now);
       const objectDetections = objectDetectorRef.current.detectForVideo(video, now);
-      
-      const validFaceDetections = (faceDetections.detections || []).filter((face) => {
-        const confidence = face?.categories?.[0]?.score || 0;
-        return confidence >= FACE_CONFIDENCE_THRESHOLD;
-      });
-      const faceCount = validFaceDetections.length;
+      const distinctFaces = getDistinctFaceDetections(faceDetections, video);
+      const faceCount = distinctFaces.length;
       
       // Only log when face count is abnormal (not 1)
       if (faceCount !== 1) {
         console.log(`[AI] 👥 Face count: ${faceCount}`);
-        if (validFaceDetections.length > 0) {
-          validFaceDetections.forEach((face, idx) => {
+        if (distinctFaces.length > 0) {
+          distinctFaces.forEach((face, idx) => {
             const confidence = face.categories?.[0]?.score || 0;
             console.log(`[AI]   Face ${idx + 1}: confidence ${(confidence * 100).toFixed(1)}%`);
           });
@@ -377,11 +436,11 @@ export const useAICheatingDetection = (onViolation) => {
       lastFrameTimeRef.current = now;
 
       const violations = [
-        detectMultipleFaces(faceDetections),
-        detectNoFace(faceDetections),
+        detectMultipleFaces(distinctFaces),
+        detectNoFace(distinctFaces),
         detectPhone(objectDetections),
         detectSuspiciousObject(objectDetections),
-        detectLookingDown(faceDetections)
+        detectLookingDown(distinctFaces)
       ].filter(v => v !== null);
 
       if (violations.length > 0) {
@@ -409,7 +468,7 @@ export const useAICheatingDetection = (onViolation) => {
     } catch (error) {
       console.error('[AI Detection] ❌ Error during detection:', error);
     }
-  }, [detectMultipleFaces, detectNoFace, detectPhone, detectSuspiciousObject, detectLookingDown, onViolation]);
+  }, [detectMultipleFaces, detectNoFace, detectPhone, detectSuspiciousObject, detectLookingDown, getDistinctFaceDetections, onViolation]);
 
   const startDetection = useCallback(async (videoElement) => {
     console.log('[AI] startDetection called');

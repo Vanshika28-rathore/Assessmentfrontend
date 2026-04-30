@@ -164,37 +164,48 @@ const InterviewsList = () => {
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
 
-  const downloadInterviewResults = () => {
-    const completed = interviews.filter((interview) => interview.status === 'completed');
-    if (completed.length === 0) {
-      alert('No completed interview results found for the current filter.');
-      return;
+  const downloadInterviewResults = async () => {
+    try {
+      const response = await apiFetch('api/ai-interview/export', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+        }
+      });
+      const data = await response.json();
+      if (!data.success || !data.data || data.data.length === 0) {
+        alert('No AI interview results found to download.');
+        return;
+      }
+
+      const rows = data.data.map((interview) => ({
+        'Interview ID': interview.id,
+        'Student ID': interview.student_id,
+        'Student Name': interview.student_name || interview.full_name || '-',
+        'Roll Number': interview.roll_number || '-',
+        'Email': interview.email || '-',
+        'Institute': interview.institute || '-',
+        'Rating': interview.rating ?? '-',
+        'Correct Answers': interview.correct_count ?? '-',
+        'Total Questions': interview.total_scored_questions ?? '-',
+        'Result Status': interview.result_status || '-',
+        'Shortlisted': interview.shortlisted === true ? 'Yes' : interview.shortlisted === false ? 'No' : '-',
+        'Feedback': interview.feedback_comment || '-',
+        'Date': interview.created_at ? new Date(interview.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '-',
+      }));
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 14 }, { wch: 14 }, { wch: 24 }, { wch: 16 }, { wch: 30 },
+        { wch: 24 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 16 },
+        { wch: 12 }, { wch: 50 }, { wch: 24 }
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, 'AI Interview Results');
+      XLSX.writeFile(wb, `AI_Interview_Results_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (error) {
+      console.error('Download AI interview results error:', error);
+      alert('Failed to download AI interview results.');
     }
-
-    const rows = completed.map((interview) => ({
-      'Interview ID': interview.id,
-      'Student ID': interview.student_id,
-      'Student Name': interview.student_name,
-      'Email': interview.student_email,
-      'Institute': interview.institute_name || '-',
-      'Test': interview.test_title || '-',
-      'Scheduled Time': formatDateTime(interview.scheduled_time),
-      'Duration': `${interview.duration} minutes`,
-      'Technical Score': interview.technical_score ?? '-',
-      'Communication Score': interview.communication_score ?? '-',
-      'Recommendation': interview.recommendation || '-',
-      'Admin Notes': interview.admin_notes || '-',
-    }));
-
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [
-      { wch: 14 }, { wch: 12 }, { wch: 24 }, { wch: 30 }, { wch: 24 },
-      { wch: 26 }, { wch: 24 }, { wch: 14 }, { wch: 16 }, { wch: 20 },
-      { wch: 18 }, { wch: 50 }
-    ];
-    XLSX.utils.book_append_sheet(wb, ws, 'Interview Results');
-    XLSX.writeFile(wb, `Interview_Results_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   if (loading) {

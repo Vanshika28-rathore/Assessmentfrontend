@@ -19,24 +19,40 @@ const isGarbledResumeText = (text = '') => {
 
 const SKILL_KEYWORDS = {
   React: ['react', 'jsx', 'hook', 'usestate', 'useeffect', 'component', 'props', 'redux', 'virtual dom'],
-  JavaScript: ['javascript', 'js', 'promise', 'async', 'closure', 'prototype', 'event loop', 'es6', 'arrow'],
+  JavaScript: ['javascript', 'js', 'promise', 'async', 'closure', 'prototype', 'event loop', 'es6', 'arrow', 'webpack', 'babel', 'state machine', 'event-driven', 'event driven', 'react router', 'router', 'hooks', 'callback', 'memoization'],
   Python: ['python', 'django', 'flask', 'pandas', 'numpy', 'pip', 'decorator', 'generator'],
   Java: ['java', 'spring', 'jvm', 'oop', 'inheritance', 'polymorphism', 'interface', 'exception'],
-  'Node.js': ['node', 'nodejs', 'express', 'npm', 'middleware', 'rest api', 'backend'],
-  'SQL / Database': ['sql', 'mysql', 'postgresql', 'mongodb', 'database', 'query', 'join', 'index', 'schema'],
-  'CSS / HTML': ['css', 'html', 'flexbox', 'grid', 'responsive', 'tailwind', 'bootstrap'],
-  'Cloud / DevOps': ['aws', 'azure', 'docker', 'kubernetes', 'git', 'ci/cd', 'linux', 'deployment'],
+  'Node.js': ['node', 'nodejs', 'express', 'npm', 'middleware', 'rest api', 'backend', 'api route', 'endpoint', 'jwt', 'authentication', 'authorization', 'websocket', 'socket'],
+  'SQL / Database': ['sql', 'mysql', 'postgresql', 'mongodb', 'database', 'query', 'join', 'index', 'schema', 'cache', 'caching', 'redis', 'normalization', 'transaction'],
+  'CSS / HTML': ['css', 'html', 'flexbox', 'grid', 'responsive', 'tailwind', 'bootstrap', 'layout', 'media query', 'web accessibility', 'a11y'],
+  'Cloud / DevOps': ['aws', 'azure', 'docker', 'kubernetes', 'git', 'ci/cd', 'linux', 'deployment', 'cdn', 'nginx', 'load balancer', 'monitoring'],
   'Data Structures': ['array', 'linked list', 'tree', 'graph', 'stack', 'queue', 'algorithm', 'big o', 'sorting'],
-  TypeScript: ['typescript', 'type', 'interface', 'generics', 'enum'],
+  TypeScript: ['typescript', 'type', 'interface', 'generics', 'enum', 'next.js', 'nextjs', 'tsconfig'],
   'General / Other': [],
 };
 
-const detectSkill = (text = '') => {
-  const lower = text.toLowerCase();
-  for (const [skill, keywords] of Object.entries(SKILL_KEYWORDS)) {
-    if (skill === 'General / Other') continue;
-    if (keywords.some((k) => lower.includes(k))) return skill;
-  }
+const detectSkill = (question = '', answer = '') => {
+  const questionText = String(question || '').toLowerCase();
+  const answerText = String(answer || '').toLowerCase();
+  const combined = `${questionText} ${answerText}`;
+  let bestSkill = 'General / Other';
+  let bestScore = 0;
+
+  Object.entries(SKILL_KEYWORDS).forEach(([skill, keywords]) => {
+    if (skill === 'General / Other') return;
+    let score = 0;
+    keywords.forEach((keyword) => {
+      if (questionText.includes(keyword)) score += 2;
+      if (answerText.includes(keyword)) score += 1;
+      if (combined.includes(keyword)) score += 1;
+    });
+    if (score > bestScore) {
+      bestScore = score;
+      bestSkill = skill;
+    }
+  });
+
+  if (bestScore >= 2) return bestSkill;
   return 'General / Other';
 };
 
@@ -76,7 +92,7 @@ const buildSummary = (chatHistory = [], scoredQuestions = [], ignoredQuestions =
     const pairs = normalizedScored.map((item, index) => ({
       question: item?.question || '',
       answer: item?.answer || '',
-      skill: detectSkill(item?.question || ''),
+      skill: detectSkill(item?.question || '', item?.answer || ''),
       eval: item?.verdict === 'correct'
         ? 'detailed'
         : item?.verdict === 'partially_correct'
@@ -94,18 +110,30 @@ const buildSummary = (chatHistory = [], scoredQuestions = [], ignoredQuestions =
     });
 
     const totalQ = normalizedScored.length + normalizedIgnored.length;
-    const answered = normalizedScored.filter((item) => item?.verdict !== 'incorrect' || (item?.answer || '').trim().length > 0).length;
+    const answeredScored = normalizedScored.filter((item) => item?.verdict !== 'incorrect' || (item?.answer || '').trim().length > 0).length;
+    const answered = Math.min(totalQ, answeredScored + normalizedIgnored.length);
     const detailed = normalizedScored.filter((item) => item?.verdict === 'correct').length;
-    const notAns = normalizedScored.filter((item) => item?.verdict === 'incorrect').length;
+    const notAns = Math.max(0, totalQ - answered);
 
     let overallGrade = 'Poor';
     let gradeColor = 'text-red-700 bg-red-50 border-red-200';
-    const pct = normalizedScored.length > 0 ? answered / normalizedScored.length : 0;
+    const pct = normalizedScored.length > 0 ? answeredScored / normalizedScored.length : 0;
     if (pct >= 0.8) { overallGrade = 'Excellent'; gradeColor = 'text-green-700 bg-green-50 border-green-200'; }
     else if (pct >= 0.6) { overallGrade = 'Good'; gradeColor = 'text-blue-700 bg-blue-50 border-blue-200'; }
     else if (pct >= 0.4) { overallGrade = 'Average'; gradeColor = 'text-amber-700 bg-amber-50 border-amber-200'; }
 
-    return { pairs, groups, totalQ, answered, detailed, notAns, overallGrade, gradeColor };
+    return {
+      pairs,
+      groups,
+      totalQ,
+      answered,
+      detailed,
+      notAns,
+      overallGrade,
+      gradeColor,
+      scoredTotal: normalizedScored.length,
+      ignoredTotal: normalizedIgnored.length,
+    };
   }
 
   if (!Array.isArray(chatHistory) || chatHistory.length === 0) return null;
@@ -120,7 +148,7 @@ const buildSummary = (chatHistory = [], scoredQuestions = [], ignoredQuestions =
       pairs.push({
         question: cur.content || '',
         answer: next.content || '',
-        skill: detectSkill(cur.content || ''),
+        skill: detectSkill(cur.content || '', next.content || ''),
         eval: evaluateAnswer(next.content || ''),
       });
     }
@@ -145,7 +173,18 @@ const buildSummary = (chatHistory = [], scoredQuestions = [], ignoredQuestions =
   else if (pct >= 0.6) { overallGrade = 'Good'; gradeColor = 'text-blue-700 bg-blue-50 border-blue-200'; }
   else if (pct >= 0.4) { overallGrade = 'Average'; gradeColor = 'text-amber-700 bg-amber-50 border-amber-200'; }
 
-  return { pairs, groups, totalQ, answered, detailed, notAns, overallGrade, gradeColor };
+  return {
+    pairs,
+    groups,
+    totalQ,
+    answered,
+    detailed,
+    notAns,
+    overallGrade,
+    gradeColor,
+    scoredTotal: totalQ,
+    ignoredTotal: 0,
+  };
 };
 import AdminLayout from '../../components/AdminLayout';
 import { API_URL } from '../../config/api';
@@ -541,6 +580,16 @@ const AIInterviewResults = ({ isTab = false }) => {
                         <span className="px-3 py-1 bg-shnoor-lavender text-shnoor-navy rounded-full text-xs font-semibold border border-shnoor-mist">
                           {summary.totalQ} Questions Asked
                         </span>
+                        {typeof summary.scoredTotal === 'number' && (
+                          <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-semibold border border-indigo-200">
+                            {summary.scoredTotal} Scored Technical
+                          </span>
+                        )}
+                        {typeof summary.ignoredTotal === 'number' && (
+                          <span className="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-semibold border border-amber-200">
+                            {summary.ignoredTotal} Ignored / Non-scored
+                          </span>
+                        )}
                         <span className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-xs font-semibold border border-green-200">
                           {summary.answered} Answered
                         </span>
@@ -592,6 +641,60 @@ const AIInterviewResults = ({ isTab = false }) => {
                             </div>
                           );
                         })}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="bg-white border border-shnoor-mist/40 rounded-xl p-4">
+                          <p className="text-xs font-bold uppercase tracking-wide text-shnoor-indigoMedium">Answer Scoring</p>
+                          <div className="mt-3 space-y-2 text-sm text-shnoor-navy">
+                            <div className="flex items-center justify-between">
+                              <span>Content quality</span>
+                              <span className="font-bold">{selectedInterview.assessment_summary?.qualitySummary?.contentQuality ?? '-'}/5</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span>Clarity</span>
+                              <span className="font-bold">{selectedInterview.assessment_summary?.qualitySummary?.clarity ?? '-'}/5</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span>Relevance</span>
+                              <span className="font-bold">{selectedInterview.assessment_summary?.qualitySummary?.relevance ?? '-'}/5</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-white border border-shnoor-mist/40 rounded-xl p-4">
+                          <p className="text-xs font-bold uppercase tracking-wide text-shnoor-indigoMedium">Communication</p>
+                          <div className="mt-3 space-y-2 text-sm text-shnoor-navy">
+                            <div className="flex items-center justify-between">
+                              <span>Confidence</span>
+                              <span className="font-bold">{selectedInterview.assessment_summary?.communicationSummary?.confidence ?? '-'}/5</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span>Filler words</span>
+                              <span className="font-bold">{selectedInterview.assessment_summary?.communicationSummary?.fillerWords ?? 0}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span>Main tone</span>
+                              <span className="font-bold capitalize">{selectedInterview.assessment_summary?.communicationSummary?.dominantTone || '-'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-white border border-shnoor-mist/40 rounded-xl p-4">
+                          <p className="text-xs font-bold uppercase tracking-wide text-shnoor-indigoMedium">Skill Breakdown</p>
+                          <div className="mt-3 space-y-2 text-xs text-shnoor-navy max-h-32 overflow-y-auto pr-1">
+                            {Object.entries(selectedInterview.assessment_summary?.skillBreakdown || {}).length > 0 ? (
+                              Object.entries(selectedInterview.assessment_summary?.skillBreakdown || {}).map(([skill, meta]) => (
+                                <div key={skill} className="flex items-center justify-between gap-3">
+                                  <span className="font-semibold">{skill}</span>
+                                  <span>{meta.correct || 0}/{meta.total || 0} correct</span>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-shnoor-indigoMedium">Detailed skill split not available.</p>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
@@ -688,7 +791,7 @@ const AIInterviewResults = ({ isTab = false }) => {
                       <BrainCircuit size={16} className="text-shnoor-indigo" />
                       <span>Interview Transcript</span>
                     </h3>
-                    <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
+                    <div className="space-y-3 h-[24rem] md:h-[33rem] overflow-y-auto pr-1">
                       {Array.isArray(selectedInterview.chat_history) && selectedInterview.chat_history.map((msg, idx) => {
                         const role = msg?.role === 'assistant' ? 'ai' : msg?.role;
                         return role === 'ai' || role === 'user' ? (
@@ -719,7 +822,7 @@ const AIInterviewResults = ({ isTab = false }) => {
                     {Array.isArray(selectedInterview.scored_questions) && selectedInterview.scored_questions.length > 0 && (
                       <div className="mt-5">
                         <h3 className="text-sm font-bold text-shnoor-navy mb-3">Scored Technical Questions</h3>
-                        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                        <div className="space-y-3 h-[24rem] md:h-[33rem] overflow-y-auto pr-1">
                           {selectedInterview.scored_questions.map((item) => (
                             <div key={item.number} className="border border-shnoor-mist/40 rounded-xl p-3 bg-white">
                               <div className="flex items-center justify-between gap-3 mb-2">
@@ -735,7 +838,27 @@ const AIInterviewResults = ({ isTab = false }) => {
                                 </span>
                               </div>
                               <p className="text-xs font-semibold text-shnoor-navy">{item.question}</p>
+                              <div className="flex flex-wrap gap-2 mt-2">
+                                <span className="text-[10px] px-2 py-1 rounded-full bg-shnoor-lavender text-shnoor-navy font-bold border border-shnoor-mist/40">
+                                  {item.skillCategory || detectSkill(item.question, item.answer)}
+                                </span>
+                                <span className="text-[10px] px-2 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
+                                  Content {item.quality?.contentQuality ?? '-'} / 5
+                                </span>
+                                <span className="text-[10px] px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+                                  Clarity {item.quality?.clarity ?? '-'} / 5
+                                </span>
+                                <span className="text-[10px] px-2 py-1 rounded-full bg-green-50 text-green-700 font-bold border border-green-200">
+                                  Relevance {item.quality?.relevance ?? '-'} / 5
+                                </span>
+                                <span className="text-[10px] px-2 py-1 rounded-full bg-amber-50 text-amber-700 font-bold border border-amber-200">
+                                  Confidence {item.communication?.confidenceScore ?? '-'} / 5
+                                </span>
+                              </div>
                               <p className="text-xs text-shnoor-indigoMedium mt-2">{item.reason}</p>
+                              <p className="text-[11px] text-gray-500 mt-2">
+                                Tone: <span className="font-semibold capitalize">{item.communication?.tone || 'neutral'}</span> | Filler words: <span className="font-semibold">{item.communication?.fillerCount ?? 0}</span>
+                              </p>
                             </div>
                           ))}
                         </div>
