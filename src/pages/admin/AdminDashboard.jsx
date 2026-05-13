@@ -3630,22 +3630,22 @@ const AdminDashboard = () => {
                               >
                                 <div className="flex items-center justify-between">
                                   <div className="flex-1">
-                                    <h4 className="font-bold text-shnoor-navy">{student.student_name}</h4>
-                                    <p className="text-sm text-shnoor-indigoMedium">{student.student_email}</p>
+                                    <h4 className="font-bold text-shnoor-navy">{student.student_name || `Student ${student.student_roll_number || student.student_id}`}</h4>
+                                    <p className="text-sm text-shnoor-indigoMedium">{student.student_email || `ID: ${student.student_roll_number || student.student_id}`}</p>
                                   </div>
                                   <div className="text-right">
                                     <p className="text-2xl font-bold text-shnoor-indigo">{student.total_violations}</p>
                                     <p className="text-xs text-shnoor-indigoMedium">Total Violations</p>
                                   </div>
                                 </div>
-                                <div className="mt-3 flex space-x-4 text-sm">
+                                <div className="mt-3 flex flex-wrap gap-2 text-sm">
                                   <span className="px-3 py-1 bg-shnoor-indigo text-white rounded-full font-medium">
                                     High: {student.high_severity_count}
                                   </span>
                                   <span className="px-3 py-1 bg-shnoor-indigoMedium text-white rounded-full font-medium">
                                     Medium: {student.medium_severity_count}
                                   </span>
-                                  <span className="text-shnoor-indigoMedium">
+                                  <span className="text-shnoor-indigoMedium break-words">
                                     Last: {new Date(student.last_violation).toLocaleString()}
                                   </span>
                                 </div>
@@ -3668,11 +3668,11 @@ const AdminDashboard = () => {
                           <p className="text-sm text-shnoor-indigoMedium mt-1">All students followed exam guidelines</p>
                         </div>
                       ) : (
-                        <div className="overflow-x-auto">
+                        <div className="overflow-x-scroll pb-2">
                           <h3 className="text-lg font-bold text-shnoor-navy mb-4">
                             Student Violations Summary
                           </h3>
-                          <table className="w-full border-collapse">
+                          <table className="min-w-[1050px] w-full border-collapse">
                             <thead>
                               <tr className="bg-shnoor-lavender border-b-2 border-shnoor-light">
                                 <th className="px-4 py-3 text-left text-sm font-bold text-shnoor-navy">Student ID</th>
@@ -3688,15 +3688,15 @@ const AdminDashboard = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {violationsByStudent.map((student, idx) => (
+                              {violationsByStudent.map((student) => (
                                 <tr
                                   key={student.student_id}
                                   className={`border-b border-shnoor-light hover:bg-shnoor-lavender transition-colors ${student.total_violations >= 5 ? 'bg-shnoor-lavender/50' : ''
                                     }`}
                                 >
-                                  <td className="px-4 py-3 text-sm text-shnoor-indigoMedium">{student.student_id}</td>
-                                  <td className="px-4 py-3 text-sm font-medium text-shnoor-navy">{student.student_name}</td>
-                                  <td className="px-4 py-3 text-sm text-shnoor-indigoMedium">{student.student_email}</td>
+                                  <td className="px-4 py-3 text-sm text-shnoor-indigoMedium">{student.student_roll_number || student.student_id}</td>
+                                  <td className="px-4 py-3 text-sm font-medium text-shnoor-navy">{student.student_name || 'N/A'}</td>
+                                  <td className="px-4 py-3 text-sm text-shnoor-indigoMedium">{student.student_email || 'N/A'}</td>
                                   <td className="px-4 py-3 text-sm text-shnoor-indigoMedium">{student.student_phone || 'N/A'}</td>
                                   <td className="px-4 py-3 text-center">
                                     <span className={`inline-block px-3 py-1 rounded-full text-sm font-bold ${student.no_face_count > 0 ? 'bg-shnoor-indigo/10 text-shnoor-indigo' : 'bg-shnoor-lavender text-shnoor-soft'

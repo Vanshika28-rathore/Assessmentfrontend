@@ -1308,7 +1308,7 @@ int main() {
 
             {/* Column 2 - Problem Description (resizable) */}
             <div
-              style={{ width: `${leftPanelWidth}%` }}
+              style={{ width: window.innerWidth >= 1024 ? `${leftPanelWidth}%` : '100%' }}
               className={`bg-white overflow-y-auto custom-scrollbar pb-16 lg:pb-0 border-r border-shnoor-mist flex-shrink-0 ${activeCodingTab === 'description' ? 'flex flex-col w-full' : 'hidden'} lg:flex lg:flex-col`}
             >
               {/* Description Header */}
@@ -1413,6 +1413,7 @@ int main() {
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={async () => {
+                      setBottomPanelTab('console');
                       const currentAnswer = answers[currentQuestion];
                       const currentLang = currentAnswer?.language || 'java';
                       const currentCode = currentAnswer?.code || currentAnswer?.codes?.[currentLang] || getStarterCode(currentLang);
@@ -1514,6 +1515,7 @@ int main() {
                   </button>
                   <button
                     onClick={async () => {
+                      setBottomPanelTab('console');
                       const currentAnswer = answers[currentQuestion];
                       const currentLang = currentAnswer?.language || 'java';
                       const currentCode = currentAnswer?.code || currentAnswer?.codes?.[currentLang] || getStarterCode(currentLang);

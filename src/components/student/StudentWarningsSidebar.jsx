@@ -84,16 +84,16 @@ const StudentWarningsSidebar = ({
 
   if (isCollapsed) {
     return (
-      <div className="bg-white border-l border-gray-200 w-12 flex flex-col items-center py-4">
+      <div className="bg-white border-l border-gray-200 w-9 sm:w-12 flex flex-col items-center py-2 sm:py-4">
         <button
           onClick={onToggleCollapse}
-          className="p-2 text-gray-600 hover:text-shnoor-navy hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-1.5 sm:p-2 text-gray-600 hover:text-shnoor-navy hover:bg-gray-100 rounded-lg transition-colors"
           title="Expand Messages"
         >
-          <MessageCircle size={20} />
+          <MessageCircle size={16} className="sm:w-5 sm:h-5" />
         </button>
         {messages.length > 0 && (
-          <div className="mt-2 w-6 h-6 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+          <div className="mt-1.5 w-5 h-5 sm:w-6 sm:h-6 bg-red-500 text-white text-[10px] sm:text-xs font-bold rounded-full flex items-center justify-center">
             {messages.length > 99 ? '99+' : messages.length}
           </div>
         )}

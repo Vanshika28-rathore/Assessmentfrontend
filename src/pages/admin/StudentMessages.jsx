@@ -108,20 +108,35 @@ const StudentMessages = () => {
     if (!socket) return;
 
     const handleNewStudentMessage = (data) => {
+      const incomingStudentId = data?.studentId ? String(data.studentId).trim() : null;
       setMessages(prev => {
-        const exists = prev.find(m => m.student_id === data.studentId);
+        const exists = prev.find(m => String(m.student_id || '').trim() === String(incomingStudentId || ''));
         if (exists) {
-          return prev.map(m =>
-            m.student_id === data.studentId
+          const updated = prev.map(m =>
+            String(m.student_id || '').trim() === String(incomingStudentId || '')
               ? { ...m, message: data.messagePreview, unread_count: (parseInt(m.unread_count) || 0) + 1, created_at: data.createdAt }
               : m
           );
+          return updated.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         }
-        return prev;
+        if (!incomingStudentId) return prev;
+        const newConversation = {
+          id: data.id,
+          student_id: incomingStudentId,
+          name: data.studentName || 'Student',
+          college: data.college || null,
+          message: data.messagePreview || '',
+          unread_count: 1,
+          status: 'unread',
+          created_at: data.createdAt || new Date().toISOString(),
+          image_path: data.imagePath || null,
+          sender_type: 'student'
+        };
+        return [newConversation, ...prev];
       });
 
       const current = selectedMessageRef.current;
-      if (current && current.student_id === data.studentId) {
+      if (current && String(current.student_id || '').trim() === String(incomingStudentId || '')) {
         // Real-time: Add message to conversation thread
         setConversationThread(prev => [...prev, {
           id: data.id,
@@ -538,7 +553,7 @@ const StudentMessages = () => {
           <ArrowLeft size={18} />
           Back to Dashboard
         </button>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-shnoor-navy">Student Support</h1>
             <p className="text-shnoor-soft text-sm mt-1">
@@ -550,10 +565,10 @@ const StudentMessages = () => {
               )}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setShowAnalytics(!showAnalytics)}
-              className={`flex items-center gap-2 px-3 py-2 text-sm border rounded-lg transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm border rounded-lg transition-colors ${
                 showAnalytics 
                   ? 'bg-shnoor-indigo text-white border-shnoor-indigo' 
                   : 'bg-white border-shnoor-mist hover:bg-shnoor-lavender'
@@ -567,7 +582,7 @@ const StudentMessages = () => {
                 setBulkDeleteMode(!bulkDeleteMode);
                 setSelectedConversations(new Set());
               }}
-              className={`flex items-center gap-2 px-3 py-2 text-sm border rounded-lg transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2 text-xs sm:text-sm border rounded-lg transition-colors ${
                 bulkDeleteMode 
                   ? 'bg-red-600 text-white border-red-600' 
                   : 'bg-white border-shnoor-mist hover:bg-shnoor-lavender'
@@ -578,7 +593,7 @@ const StudentMessages = () => {
             </button>
             <button
               onClick={fetchMessages}
-              className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-shnoor-mist rounded-lg hover:bg-shnoor-lavender transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm bg-white border border-shnoor-mist rounded-lg hover:bg-shnoor-lavender transition-colors"
             >
               <RefreshCw size={16} />
               Refresh
@@ -586,7 +601,7 @@ const StudentMessages = () => {
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="flex items-center gap-2 px-3 py-2 text-sm bg-shnoor-indigo text-white rounded-lg hover:bg-shnoor-navy transition-colors"
+                className="flex items-center gap-2 px-3 py-2 text-xs sm:text-sm bg-shnoor-indigo text-white rounded-lg hover:bg-shnoor-navy transition-colors"
               >
                 <CheckCheck size={16} />
                 Mark All Read

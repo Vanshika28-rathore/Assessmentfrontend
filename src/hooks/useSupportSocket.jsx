@@ -162,14 +162,10 @@ export const useSupportSocket = ({
 
     // Create socket connection with error handling
     let socket;
-    let connectionAttempts = 0;
-    const MAX_ATTEMPTS = 3;
-
     try {
       socket = io(SOCKET_URL, {
         transports: ['polling', 'websocket'],
         reconnection: true,
-        reconnectionAttempts: MAX_ATTEMPTS,
         reconnectionDelay: 2000,
         timeout: 10000,
         autoConnect: true
@@ -180,7 +176,6 @@ export const useSupportSocket = ({
       socket.on('connect', () => {
         console.log('[SupportSocket] Connected:', socket.id);
         setIsConnected(true);
-        connectionAttempts = 0; // Reset on successful connection
 
         // Join appropriate room based on user type
         if (isAdmin) {
@@ -198,15 +193,8 @@ export const useSupportSocket = ({
       });
 
       socket.on('connect_error', (error) => {
-        connectionAttempts++;
-        console.warn(`[SupportSocket] Connection error (${connectionAttempts}/${MAX_ATTEMPTS}):`, error.message);
+        console.warn('[SupportSocket] Connection error:', error.message);
         setIsConnected(false);
-        
-        // Stop trying after max attempts
-        if (connectionAttempts >= MAX_ATTEMPTS) {
-          console.warn('[SupportSocket] Max connection attempts reached, stopping reconnection');
-          socket.disconnect();
-        }
       });
 
       socket.on('reconnect_failed', () => {

@@ -191,7 +191,7 @@ const AdminHeader = ({ title = "Dashboard", userName = "Admin" }) => {
               <MessageSquare size={18} className="mr-3" />
               <span>Messages</span>
               {unreadCount > 0 && (
-                <span className="ml-auto bg-red-500 text-white px-2 py-0.5 text-xs font-bold rounded-full">
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full border border-white/80 flex items-center justify-center leading-none">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
